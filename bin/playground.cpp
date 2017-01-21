@@ -15,16 +15,16 @@ using namespace tbb;
 using namespace tbb::flow;
 using namespace ilastikbackend;
 
-using data_type = flowgraph::JobData<int>;
+using data_type = flowgraph::job_data<int>;
 
 struct square
 {
     data_type operator()(data_type v)
     {
         if(v.data)
-            return data_type(v.jobId, *v.data * *v.data); // *v.data dereferences the optional!
+            return data_type(v.job_id, *v.data * *v.data); // *v.data dereferences the optional!
         else
-            return data_type(v.jobId);
+            return data_type(v.job_id);
     }
 };
 
@@ -33,9 +33,9 @@ struct cube
     data_type operator()(data_type v)
     {
         if(v.data)
-            return data_type(v.jobId, *v.data * *v.data * *v.data);
+            return data_type(v.job_id, *v.data * *v.data * *v.data);
         else
-            return data_type(v.jobId);
+            return data_type(v.job_id);
     }
 };
 
@@ -57,36 +57,36 @@ class sum
 class test_operator : public operators::base_operator<tuple<data_type, data_type, data_type>, tuple<data_type> >
 {
 public:
-    test_operator(const types::SetOfCancelledJobIds& setOfCancelledJobIds):
+    test_operator(const types::set_of_cancelled_job_ids& setOfCancelledJobIds):
         base_operator<tuple<data_type, data_type, data_type>, tuple<data_type> >(setOfCancelledJobIds)
     {
     }
 
     virtual tuple<data_type> executeImpl(const tuple<data_type,data_type, data_type>& a)
     {
-        std::cout << "Combining jobs of ids " << get<0>(a).jobId << " and " << get<1>(a).jobId << std::endl;
-        assert(get<0>(a).jobId == get<1>(a).jobId);
+        std::cout << "Combining jobs of ids " << get<0>(a).job_id << " and " << get<1>(a).job_id << std::endl;
+        assert(get<0>(a).job_id == get<1>(a).job_id);
 
         if(get<0>(a).data && get<1>(a).data)
         {
-            return tuple<data_type>(data_type(get<0>(a).jobId, *get<0>(a).data * *get<1>(a).data));
+            return tuple<data_type>(data_type(get<0>(a).job_id, *get<0>(a).data * *get<1>(a).data));
         }
 
-        return tuple<data_type>(data_type(get<0>(a).jobId));
+        return tuple<data_type>(data_type(get<0>(a).job_id));
     }
 };
 
 int main()
 {
     int result = 0;
-    types::SetOfCancelledJobIds cancelledJobIds;
+    types::set_of_cancelled_job_ids cancelled_job_ids;
 
     graph g;
     broadcast_node<data_type> input(g);
     function_node<data_type, data_type> squarer(g, unlimited, square());
     function_node<data_type, data_type> cuber(g, unlimited, cube());
     function_node<data_type, int> summer(g, serial, sum(result));
-    flowgraph::multi_inout_node<tuple<data_type, data_type, data_type>, tuple<data_type> > multi_inout_tester(g, std::make_shared<test_operator>(cancelledJobIds));
+    flowgraph::multi_inout_node<tuple<data_type, data_type, data_type>, tuple<data_type> > multi_inout_tester(g, std::make_shared<test_operator>(cancelled_job_ids));
 
     make_edge(input, squarer);
     make_edge(input, cuber);

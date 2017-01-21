@@ -13,25 +13,25 @@ namespace ilastikbackend
         * The data is stored as optional type, which is present ONLY IF the job was NOT cancelled.
         */
         template<typename T>
-        struct JobData
+        struct job_data
         {
-            types::JobIdType jobId;
-            ilastikbackend::types::Optional<T> data;
+            types::job_id_type job_id;
+            ilastikbackend::types::optional<T> data;
 
             /// empty constructor
-            JobData():
-                jobId(0),
+            job_data():
+                job_id(0),
                 data()
             {}
 
             /// constructor without data
-            JobData(types::JobIdType jobId):
-                jobId(jobId)
+            job_data(types::job_id_type jobId):
+                job_id(jobId)
             {}
 
             /// constructor with jobid and data
-            JobData(types::JobIdType jobId, T data):
-              jobId(jobId),
+            job_data(types::job_id_type jobId, T data):
+              job_id(jobId),
               data(data)
             {}
         };
@@ -40,11 +40,11 @@ namespace ilastikbackend
         Functor needed by the MultiInOutNode's join_node to extract the key per input.
         */
         template<typename T>
-        struct JobDataIdExtractor
+        struct job_data_id_extractor
         {
-            types::JobIdType operator()(const T& jd)
+            types::job_id_type operator()(const T& jd)
             {
-                return jd.jobId;
+                return jd.job_id;
             }
         };
     }

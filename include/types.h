@@ -15,17 +15,17 @@ namespace types {
 /// Optionals are variables that must not have a value set.
 #ifdef CPP17
     template<typename T>
-    using Optional = std::experimental::optional<T>;
+    using optional = std::experimental::optional<T>;
 #else
     template<typename T>
-    using Optional = boost::optional<T>;
+    using optional = boost::optional<T>;
 #endif
 
 /// We use size_t to assign a unique ID to every job (e.g. processing a block)
-using JobIdType = size_t;
+using job_id_type = size_t;
 
 /// We use a concurrently accessible set to store all job ids that are cancelled
-using SetOfCancelledJobIds = tbb::concurrent_unordered_set<JobIdType>;
+using set_of_cancelled_job_ids = tbb::concurrent_unordered_set<job_id_type>;
 } // types
 } // ilastikbackend
 

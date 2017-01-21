@@ -12,17 +12,17 @@ namespace ilastikbackend
         class base_operator
         {
         public:
-            base_operator(const types::SetOfCancelledJobIds& setOfCancelledJobIds);
+            base_operator(const types::set_of_cancelled_job_ids& setOfCancelledJobIds);
             virtual ~base_operator();
         
             OUT execute(const IN& in);
             virtual OUT executeImpl(const IN& in) = 0;
         private:
-            const types::SetOfCancelledJobIds& setOfCancelledJobIds_;
+            const types::set_of_cancelled_job_ids& setOfCancelledJobIds_;
         };
     
         template<typename IN, typename OUT>
-        base_operator<IN, OUT>::base_operator(const types::SetOfCancelledJobIds& setOfCancelledJobIds):
+        base_operator<IN, OUT>::base_operator(const types::set_of_cancelled_job_ids& setOfCancelledJobIds):
             setOfCancelledJobIds_(setOfCancelledJobIds)
         {
         }

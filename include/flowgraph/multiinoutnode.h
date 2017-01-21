@@ -24,13 +24,13 @@ namespace ilastikbackend
         template<typename InputTuple> class unpacked_join_node;
 
         template<typename ...INS>
-        class unpacked_join_node<tbb::flow::tuple<INS...> > : public tbb::flow::join_node< tbb::flow::tuple<INS...>, tbb::flow::key_matching<types::JobIdType> >
+        class unpacked_join_node<tbb::flow::tuple<INS...> > : public tbb::flow::join_node< tbb::flow::tuple<INS...>, tbb::flow::key_matching<types::job_id_type> >
         {
         public:
-            using base_type = tbb::flow::join_node< tbb::flow::tuple<INS...>, tbb::flow::key_matching<types::JobIdType> >;
+            using base_type = tbb::flow::join_node< tbb::flow::tuple<INS...>, tbb::flow::key_matching<types::job_id_type> >;
         public:
             unpacked_join_node(tbb::flow::graph& graph):
-                base_type(graph, JobDataIdExtractor<INS>()...)
+                base_type(graph, job_data_id_extractor<INS>()...)
             {}
         };
 
