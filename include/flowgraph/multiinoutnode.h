@@ -17,9 +17,14 @@ namespace ilastikbackend
          * This is to make unwrapping the key matching of the job Id easier.
          *
          * Some docs on tuple unpacking: http://aherrmann.github.io/programming/2016/02/28/unpacking-tuples-in-cpp14/
+         *
+         * Also note the fancy trick applied in tbb::flow: define class with one template type, specialize it to be a tuple, but then take
+         * the tuple's types as template parameter pack!
          */
+        template<typename InputTuple> class unpacked_join_node;
+
         template<typename ...INS>
-        class unpacked_join_node : public tbb::flow::join_node< tbb::flow::tuple<INS...>, tbb::flow::key_matching<types::JobIdType> >
+        class unpacked_join_node<tbb::flow::tuple<INS...> > : public tbb::flow::join_node< tbb::flow::tuple<INS...>, tbb::flow::key_matching<types::JobIdType> >
         {
         public:
             using base_type = tbb::flow::join_node< tbb::flow::tuple<INS...>, tbb::flow::key_matching<types::JobIdType> >;
@@ -36,7 +41,7 @@ namespace ilastikbackend
         template<typename IN, typename OUT, size_t N>
         struct output_setter
         {
-            void operator()(IN& result, OUT& output_ports)
+            void operator()(IN& result, OUT& output_ports) const
             {
                 // set output
                 std::cout << "Setting output: " << N << std::endl;
@@ -51,7 +56,7 @@ namespace ilastikbackend
         template<typename IN, typename OUT>
         struct output_setter<IN, OUT, 0>
         {
-            void operator()(IN& result, OUT& output_ports)
+            void operator()(IN& result, OUT& output_ports) const
             {
                 // set output witout recursive call
                 std::cout << "Setting output: 0"<< std::endl;
@@ -70,7 +75,7 @@ namespace ilastikbackend
         {
         public:
             // typedefs
-            using input_join_node = tbb::flow::join_node< IN, tbb::flow::key_matching<types::JobIdType> >;
+            using input_join_node = unpacked_join_node<IN>;
             using operator_multifunction_node = tbb::flow::multifunction_node<typename input_join_node::output_type, OUT>;
             using base_type = tbb::flow::composite_node<IN, OUT>;
 
@@ -78,9 +83,7 @@ namespace ilastikbackend
             // API
             multi_inout_node(tbb::flow::graph& graph, std::shared_ptr<operators::base_operator<IN, OUT> > baseOp):
                 base_type(graph),
-                input_join_node_(graph,
-                                JobDataIdExtractor<JobData<int> >(),
-                                JobDataIdExtractor<JobData<int> >()),
+                input_join_node_(graph),
                 function_node_(graph, tbb::flow::unlimited, [baseOp](const IN& tupleIn, typename operator_multifunction_node::output_ports_type &output_ports) -> void {
                     OUT result = baseOp->execute(tupleIn);
                     output_setter<OUT, typename operator_multifunction_node::output_ports_type, std::tuple_size<OUT>::value - 1> os;
@@ -88,16 +91,29 @@ namespace ilastikbackend
                 }),
                 operator_(baseOp)
             {
-                // fix constructor call to input_join_node through something like this?
-                // http://stackoverflow.com/questions/7858817/unpacking-a-tuple-to-call-a-matching-function-pointer
                 tbb::flow::make_edge(input_join_node_, function_node_);
-                typename base_type::input_ports_type input_tuple(tbb::flow::input_port<0>(input_join_node_), tbb::flow::input_port<1>(input_join_node_));
-                typename base_type::output_ports_type output_tuple(tbb::flow::output_port<0>(function_node_));
+
+                // http://aherrmann.github.io/programming/2016/02/28/unpacking-tuples-in-cpp14/
+                typename base_type::input_ports_type input_tuple = get_input_tuple(std::make_index_sequence<std::tuple_size<IN>::value>());
+                typename base_type::output_ports_type output_tuple = get_output_tuple(std::make_index_sequence<std::tuple_size<OUT>::value>());
                 base_type::set_external_ports(input_tuple, output_tuple);
             }
 
             ~multi_inout_node()
             {
+            }
+
+        private:
+            template<size_t... INDICES>
+            typename base_type::input_ports_type get_input_tuple(std::index_sequence<INDICES...>)
+            {
+                return typename base_type::input_ports_type(tbb::flow::input_port<INDICES>(input_join_node_)...);
+            }
+
+            template<size_t... INDICES>
+            typename base_type::output_ports_type get_output_tuple(std::index_sequence<INDICES...>)
+            {
+                return typename base_type::output_ports_type(tbb::flow::output_port<INDICES>(function_node_)...);
             }
 
         private:

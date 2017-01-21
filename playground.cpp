@@ -1,5 +1,6 @@
 #include <iostream>
 #include <tbb/flow_graph.h>
+#include <assert.h>
 
 #include "flowgraph/jobdata.h"
 #include "flowgraph/multiinoutnode.h"
@@ -53,17 +54,19 @@ class sum
     }
 };
 
-class test_operator : public operators::base_operator<tuple<data_type, data_type>, tuple<data_type> >
+class test_operator : public operators::base_operator<tuple<data_type, data_type, data_type>, tuple<data_type> >
 {
 public:
     test_operator(const types::SetOfCancelledJobIds& setOfCancelledJobIds):
-        base_operator<tuple<data_type, data_type>, tuple<data_type> >(setOfCancelledJobIds)
+        base_operator<tuple<data_type, data_type, data_type>, tuple<data_type> >(setOfCancelledJobIds)
     {
     }
 
-    virtual tuple<data_type> executeImpl(const tuple<data_type,data_type>& a)
+    virtual tuple<data_type> executeImpl(const tuple<data_type,data_type, data_type>& a)
     {
         std::cout << "Combining jobs of ids " << get<0>(a).jobId << " and " << get<1>(a).jobId << std::endl;
+        assert(get<0>(a).jobId == get<1>(a).jobId);
+
         if(get<0>(a).data && get<1>(a).data)
         {
             return tuple<data_type>(data_type(get<0>(a).jobId, *get<0>(a).data * *get<1>(a).data));
@@ -82,14 +85,14 @@ int main()
     broadcast_node<data_type> input(g);
     function_node<data_type, data_type> squarer(g, unlimited, square());
     function_node<data_type, data_type> cuber(g, unlimited, cube());
-    join_node<tuple<data_type, data_type>, queueing> join(g);
     function_node<data_type, int> summer(g, serial, sum(result));
-    flowgraph::multi_inout_node<tuple<data_type, data_type>, tuple<data_type> > multi_inout_tester(g, std::make_shared<test_operator>(cancelledJobIds));
+    flowgraph::multi_inout_node<tuple<data_type, data_type, data_type>, tuple<data_type> > multi_inout_tester(g, std::make_shared<test_operator>(cancelledJobIds));
 
     make_edge(input, squarer);
     make_edge(input, cuber);
     make_edge(squarer, get<0>(multi_inout_tester.input_ports()));
     make_edge(cuber, get<1>(multi_inout_tester.input_ports()));
+    make_edge(input, get<2>(multi_inout_tester.input_ports()));
     make_edge(multi_inout_tester, summer);
 
     for (int i = 1; i <= 10; ++i)
