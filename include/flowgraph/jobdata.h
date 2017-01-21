@@ -17,6 +17,23 @@ namespace ilastikbackend
         {
             types::JobIdType jobId;
             ilastikbackend::types::Optional<T> data;
+
+            /// empty constructor
+            JobData():
+                jobId(0),
+                data()
+            {}
+
+            /// constructor without data
+            JobData(types::JobIdType jobId):
+                jobId(jobId)
+            {}
+
+            /// constructor with jobid and data
+            JobData(types::JobIdType jobId, T data):
+              jobId(jobId),
+              data(data)
+            {}
         };
 
         /**
@@ -25,7 +42,7 @@ namespace ilastikbackend
         template<typename T>
         struct JobDataIdExtractor
         {
-            types::JobIdType operator()(const JobData<T>& jd)
+            types::JobIdType operator()(const T& jd)
             {
                 return jd.jobId;
             }

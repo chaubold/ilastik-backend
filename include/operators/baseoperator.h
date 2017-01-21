@@ -2,40 +2,42 @@
 #define _OPERATORS_BASEOPERATOR_H_
 
 #include "types.h"
+#include <tbb/flow_graph.h>
 
 namespace ilastikbackend
 {
     namespace operators
     {
-        template<typename OUT, typename ...INS>
-        class BaseOperator
+        template<typename IN, typename OUT>
+        class base_operator
         {
         public:
-            BaseOperator(const types::SetOfCancelledJobIds& setOfCancelledJobIds);
-            virtual ~BaseOperator();
+            base_operator(const types::SetOfCancelledJobIds& setOfCancelledJobIds);
+            virtual ~base_operator();
         
-            OUT execute(INS... in);
-            virtual OUT executeImpl(INS... in) = 0;
+            OUT execute(const IN& in);
+            virtual OUT executeImpl(const IN& in) = 0;
         private:
             const types::SetOfCancelledJobIds& setOfCancelledJobIds_;
         };
     
-        template<typename OUT, typename ...INS>
-        BaseOperator<OUT, INS...>::BaseOperator(const types::SetOfCancelledJobIds& setOfCancelledJobIds)
+        template<typename IN, typename OUT>
+        base_operator<IN, OUT>::base_operator(const types::SetOfCancelledJobIds& setOfCancelledJobIds):
+            setOfCancelledJobIds_(setOfCancelledJobIds)
         {
         }
 
-        template<typename OUT, typename ...INS>
-        BaseOperator<OUT, INS...>::~BaseOperator()
+        template<typename IN, typename OUT>
+        base_operator<IN, OUT>::~base_operator()
         {
         }
 
-        template<typename OUT, typename ...INS>
-        OUT BaseOperator<OUT, INS...>::execute(INS... in)
+        template<typename IN, typename OUT>
+        OUT base_operator<IN, OUT>::execute(const IN& in)
         {
             // TODO: if any of the incomings is cancelled, pass on cancel messages everywhere
             // TODO: if(setOfCancelledJobIds_.count(jobId) > 0): cancelled! pass on cancel messages everywhere.
-            return executeImpl(in...);
+            return executeImpl(in);
         }
     }
 }
