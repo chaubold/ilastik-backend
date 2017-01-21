@@ -62,7 +62,7 @@ public:
     {
     }
 
-    virtual tuple<data_type> executeImpl(const tuple<data_type,data_type, data_type>& a)
+    virtual tuple<data_type> executeImpl(const tuple<data_type,data_type, data_type>& a) const
     {
         std::cout << "Combining jobs of ids " << get<0>(a).job_id << " and " << get<1>(a).job_id << std::endl;
         assert(get<0>(a).job_id == get<1>(a).job_id);
@@ -80,6 +80,7 @@ int main()
 {
     int result = 0;
     types::set_of_cancelled_job_ids cancelled_job_ids;
+    cancelled_job_ids.insert(5);
 
     graph g;
     broadcast_node<data_type> input(g);
