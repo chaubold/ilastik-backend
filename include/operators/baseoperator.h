@@ -127,7 +127,7 @@ namespace ilastikbackend
         {
             return (set_of_cancelled_job_ids_.count(job_id) > 0);
         }
-    }
-}
+    } // namespace operator
+} // namespace ilastik_backend
 
 #endif // _OPERATORS_BASEOPERATOR_H_
