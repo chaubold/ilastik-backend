@@ -3,9 +3,9 @@
 
 #include <iostream>
 #include <tbb/flow_graph.h>
-#include "types.h"
-#include "operators/baseoperator.h"
-#include "flowgraph/jobdata.h"
+#include "ilastik-backend/types.h"
+#include "ilastik-backend/operators/baseoperator.h"
+#include "ilastik-backend/flowgraph/jobdata.h"
 
 namespace ilastikbackend
 {

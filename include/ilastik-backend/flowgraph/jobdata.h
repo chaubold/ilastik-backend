@@ -1,7 +1,7 @@
 #ifndef _FLOWGRAPH_JOBDATA_H_
 #define _FLOWGRAPH_JOBDATA_H_
 
-#include "types.h"
+#include "ilastik-backend/types.h"
 
 namespace ilastikbackend
 {

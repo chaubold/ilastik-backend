@@ -4,7 +4,7 @@
 #ifdef CPP17
     #include <experimental/optional>
 #else
-    #include <boost/optional>
+    #include <boost/optional.hpp>
 #endif
 
 #include <tbb/concurrent_unordered_set.h>

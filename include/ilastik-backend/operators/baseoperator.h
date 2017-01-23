@@ -1,7 +1,7 @@
 #ifndef _OPERATORS_BASEOPERATOR_H_
 #define _OPERATORS_BASEOPERATOR_H_
 
-#include "types.h"
+#include "ilastik-backend/types.h"
 #include <tbb/flow_graph.h>
 
 namespace ilastikbackend

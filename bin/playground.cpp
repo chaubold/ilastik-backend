@@ -2,9 +2,9 @@
 #include <tbb/flow_graph.h>
 #include <assert.h>
 
-#include "flowgraph/jobdata.h"
-#include "flowgraph/multiinoutnode.h"
-#include "operators/baseoperator.h"
+#include "ilastik-backend/flowgraph/jobdata.h"
+#include "ilastik-backend/flowgraph/multiinoutnode.h"
+#include "ilastik-backend/operators/baseoperator.h"
 
 /**
  * Find TBB examples here:
