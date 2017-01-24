@@ -9,7 +9,7 @@ class handler(FileSystemEventHandler):
         super(handler, self).__init__(*args, **kwargs)
         self._callback = callback
 
-    def on_created(self, event):
+    def on_modified(self, event):
         import json
         if event.is_directory:
             return
@@ -43,7 +43,9 @@ class json_observer(object):
 
 if __name__ == "__main__":
     import time
-    observer = json_observer(lambda d: print(d))
+    import sys
+    path = sys.argv[1] if len(sys.argv) > 1 else '.'
+    observer = json_observer(lambda d: print(d), path)
     try:
         while True:
             time.sleep(1)
