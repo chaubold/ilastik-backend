@@ -72,6 +72,17 @@ namespace ilastikbackend
         class base_operator
         {
         public:
+            // derived classes should define these enums for easier slot accessing (indices into the in/out tuples)
+            /*
+            enum class input_slots {
+                FEATURES = 0
+            };
+
+            enum class output_slots {
+                PROBABILITIES = 0
+            };
+            */
+        public:
             base_operator(const types::set_of_cancelled_job_ids& set_of_cancelled_job_ids);
             virtual ~base_operator();
         
