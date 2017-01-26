@@ -60,7 +60,7 @@ include_directories(
 file(GLOB_RECURSE SOURCES src/*.cpp)
 file(GLOB_RECURSE HEADERS include/*.h)
 add_library(ilastikbackend SHARED ${SOURCES} ${HEADERS})
-target_link_libraries(ilastikbackend ${Boost_LIBRARIES} ${TBB_LIBRARIES} ${VIGRA_IMPEX_LIBRARY} ${HDF5_LIBRARIES})
+target_link_libraries(ilastikbackend ${Boost_LIBRARIES} ${TBB_LIBRARIES} ${VIGRA_IMPEX_LIBRARY} ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
 
 # installation
 install(TARGETS ilastikbackend 

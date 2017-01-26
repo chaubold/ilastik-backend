@@ -56,7 +56,8 @@ namespace ilastikbackend
                   pixel_count *= in_array.shape(dim);
                 }
 
-                assert(num_required_features == in_array.shape(0));
+                std::cout << "Have data of shape " << in_array.shape() << " and need " << num_required_features << " features" << std::endl;
+                assert(num_required_features == in_array.shape(DIM));
 
                 // transform to a feature view for prediction
                 vigra::MultiArrayView<2, DATATYPE> feature_view(vigra::Shape2(pixel_count, num_required_features), in_array.data());
@@ -68,6 +69,7 @@ namespace ilastikbackend
                 std::cout << "\tPredict RFs" << std::endl;
                 for(size_t rf = 0; rf < random_forest_vector_.size(); rf++)
                 {
+                    std::cout << "\tjob " << std::get<IN_FEATURES>(in).job_id << " step " << rf << std::endl;
                     vigra::MultiArray<2, DATATYPE> prediction_temp(pixel_count, num_pixel_classification_labels);
                     random_forest_vector_[rf].predictProbabilities(feature_view, prediction_temp);
                     prediction_map_view += prediction_temp;

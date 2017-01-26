@@ -46,7 +46,7 @@ namespace ilastikbackend
                 util::FeatureCalculator<DIM, OUT_TYPE> feature_calculator(selected_features_);
                 feature_calculator.calculate(in_array_out_type, out_array);
 
-                return tbb::flow::tuple<out_job_type>(out_job_type(std::get<OUT_FEATURES>(in).job_id));
+                return tbb::flow::tuple<out_job_type>(out_job_type(std::get<OUT_FEATURES>(in).job_id, out_array));
             }
 
         private:

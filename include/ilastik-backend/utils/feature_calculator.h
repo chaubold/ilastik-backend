@@ -372,7 +372,7 @@ namespace ilastikbackend
                 } else if (!feature_name.compare("HessianOfGaussianEigenvalues")) {
                     calculate_hessian_of_gaussian_eigenvalues(image, features_view, scale);
                 } else {
-                    throw std::runtime_error("Invalid feature name used");
+                    throw std::runtime_error("Invalid feature name used : " + feature_name);
                 }
             }
             return 0;

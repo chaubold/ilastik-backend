@@ -14,11 +14,11 @@ namespace ilastikbackend{
             typedef vigra::TinyVector<ValueType, DIM> VectorType;
 
             Block(
-                const VectorType & begin = VectorType(0),
-                const VectorType & end = VectorType(0)
-            )
-            :   begin_(begin),
-                end_(end){
+                    const VectorType & begin = VectorType(0),
+                    const VectorType & end = VectorType(0)
+                    )
+                :   begin_(begin),
+                  end_(end){
             }
 
             const VectorType & begin() const {
@@ -50,12 +50,12 @@ namespace ilastikbackend{
 
 
             BlockWithHalo(
-                const BlockType & outerBlock = BlockType(),
-                const BlockType & innerBlock = BlockType()
-            )
-            :   outerBlock_(outerBlock),
-                innerBlock_(innerBlock),
-                innerBlockLocal_(){
+                    const BlockType & outerBlock = BlockType(),
+                    const BlockType & innerBlock = BlockType()
+                    )
+                :   outerBlock_(outerBlock),
+                  innerBlock_(innerBlock),
+                  innerBlockLocal_(){
 
 
                 const auto lBegin = innerBlock.begin()  - outerBlock.begin();
@@ -96,18 +96,18 @@ namespace ilastikbackend{
             typedef typename BlockWithHaloType::VectorType VectorType;
 
             Blocking(
-                const VectorType & roiBegin,
-                const VectorType & roiEnd,
-                const VectorType & blockShape,
-                const VectorType & blockShift = VectorType(0)
-            )
-            :   roiBegin_(roiBegin),
-                roiEnd_(roiEnd),
-                blockShape_(blockShape),
-                blockShift_(blockShift),
-                blocksPerAxis_(),
-                blocksPerAxisStrides_(),
-                numberOfBlocks_(1){
+                    const VectorType & roiBegin,
+                    const VectorType & roiEnd,
+                    const VectorType & blockShape,
+                    const VectorType & blockShift = VectorType(0)
+                    )
+                :   roiBegin_(roiBegin),
+                  roiEnd_(roiEnd),
+                  blockShape_(blockShape),
+                  blockShift_(blockShift),
+                  blocksPerAxis_(),
+                  blocksPerAxisStrides_(),
+                  numberOfBlocks_(1){
 
                 for(size_t d=0; d<DIM; ++d){
                     const auto dimSize = roiEnd_[d] - (roiBegin_[d] - blockShift_[d]);
@@ -174,10 +174,10 @@ namespace ilastikbackend{
             }
 
             BlockWithHaloType getBlockWithHalo(
-                const uint64_t blockIndex,
-                const VectorType & haloBegin,
-                const VectorType & haloEnd
-            )const{
+                    const uint64_t blockIndex,
+                    const VectorType & haloBegin,
+                    const VectorType & haloEnd
+                    )const{
                 const BlockType innerBlock = getBlock(blockIndex);
 
                 VectorType outerBegin,outerEnd;
@@ -190,9 +190,9 @@ namespace ilastikbackend{
             }
 
             BlockWithHaloType getBlockWithHalo(
-                const uint64_t blockIndex,
-                const VectorType & halo
-            )const{
+                    const uint64_t blockIndex,
+                    const VectorType & halo
+                    )const{
                 return this->getBlockWithHalo(blockIndex, halo, halo);
             }
 
@@ -200,10 +200,10 @@ namespace ilastikbackend{
 
 
             BlockWithHaloType addHalo(
-                const BlockType innerBlock,
-                const VectorType & haloBegin,
-                const VectorType & haloEnd
-            )const{
+                    const BlockType innerBlock,
+                    const VectorType & haloBegin,
+                    const VectorType & haloEnd
+                    )const{
 
                 VectorType outerBegin,outerEnd;
 
@@ -217,9 +217,9 @@ namespace ilastikbackend{
 
 
             BlockWithHaloType addHalo(
-                const BlockType innerBlock,
-                const VectorType & halo
-            )const{
+                    const BlockType innerBlock,
+                    const VectorType & halo
+                    )const{
                 return this->addHalo(innerBlock, halo, halo);
             }
 
