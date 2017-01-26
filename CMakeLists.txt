@@ -47,17 +47,20 @@ endif()
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_extensions/)
 find_package(Boost REQUIRED filesystem)
 find_package(TBB)
+find_package(VIGRA)
+find_package(HDF5 REQUIRED COMPONENTS HL)
 
 include_directories(
   ${Boost_INCLUDE_DIRS}
   ${TBB_INCLUDE_DIRS}
+  ${VIGRA_INCLUDE_DIR}
 )
 # ------------------------------------------
 # build library
 file(GLOB_RECURSE SOURCES src/*.cpp)
 file(GLOB_RECURSE HEADERS include/*.h)
 add_library(ilastikbackend SHARED ${SOURCES} ${HEADERS})
-target_link_libraries(ilastikbackend ${Boost_LIBRARIES} ${TBB_LIBRARIES})
+target_link_libraries(ilastikbackend ${Boost_LIBRARIES} ${TBB_LIBRARIES} ${VIGRA_IMPEX_LIBRARY} ${HDF5_LIBRARIES})
 
 # installation
 install(TARGETS ilastikbackend 

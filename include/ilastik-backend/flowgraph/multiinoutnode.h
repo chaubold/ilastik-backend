@@ -94,6 +94,8 @@ namespace ilastikbackend
                 tbb::flow::make_edge(input_join_node_, function_node_);
 
                 // http://aherrmann.github.io/programming/2016/02/28/unpacking-tuples-in-cpp14/
+                std::cout << "Found " << std::tuple_size<IN>::value << " inputs" << std::endl;
+                std::cout << "Found " << std::tuple_size<OUT>::value << " outputs" << std::endl;
                 typename base_type::input_ports_type input_tuple = get_input_tuple(std::make_index_sequence<std::tuple_size<IN>::value>());
                 typename base_type::output_ports_type output_tuple = get_output_tuple(std::make_index_sequence<std::tuple_size<OUT>::value>());
                 base_type::set_external_ports(input_tuple, output_tuple);
