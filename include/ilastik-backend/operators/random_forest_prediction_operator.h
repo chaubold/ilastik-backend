@@ -84,7 +84,7 @@ namespace ilastikbackend
                 vigra::MultiArrayView<DIM+1, DATATYPE> prediction_map_image_view(prediction_map_shape, prediction_map_view.data());
 
                 std::cout << "done predicting for job " << std::get<IN_FEATURES>(in).job_id << std::endl;
-                return tbb::flow::tuple<out_job_type>(out_job_type(std::get<IN_FEATURES>(in).job_id));
+                return tbb::flow::tuple<out_job_type>(out_job_type(std::get<IN_FEATURES>(in).job_id, prediction_map_image_view));
             }
 
         private:

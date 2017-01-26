@@ -139,8 +139,8 @@ namespace ilastikbackend
 
         public:
             // API
-            single_inout_node(tbb::flow::graph& graph, std::shared_ptr<operators::base_operator<tbb::flow::tuple<IN>, OUT> > baseOp):
-                base_type(graph, tbb::flow::unlimited, [baseOp](const IN& in, typename base_type::output_ports_type &output_ports) -> void {
+            single_inout_node(tbb::flow::graph& graph, std::shared_ptr<operators::base_operator<tbb::flow::tuple<IN>, OUT> > baseOp, tbb::flow::concurrency concurrency=tbb::flow::unlimited):
+                base_type(graph, concurrency, [baseOp](const IN& in, typename base_type::output_ports_type &output_ports) -> void {
                     OUT result = baseOp->execute(std::make_tuple(in));
                     output_setter<OUT, typename base_type::output_ports_type, std::tuple_size<OUT>::value - 1> os;
                     os(result, output_ports);

@@ -11,6 +11,7 @@
 #include "ilastik-backend/operators/random_forest_prediction_operator.h"
 #include "ilastik-backend/utils/random_forest_reader.h"
 #include "ilastik-backend/utils/blocking.h"
+#include "ilastik-backend/operators/hdf5_output_operator.h"
 
 using namespace tbb;
 using namespace tbb::flow;
@@ -20,6 +21,8 @@ using feature_computer3u8f = operators::feature_computation_operator<3, uint8_t,
 using feature_computer3u8f_node = flowgraph::single_inout_node< feature_computer3u8f::in_job_type, tuple<feature_computer3u8f::out_job_type> >;
 using random_forest_predictor3f = operators::random_forest_prediction_operator<3, float>;
 using random_forest_predictor3f_node = flowgraph::single_inout_node< random_forest_predictor3f::in_job_type, tuple<random_forest_predictor3f::out_job_type> >;
+using hdf5_output = operators::hdf5_output_operator<4, float>;
+using hdf5_output_node = flowgraph::single_inout_node< hdf5_output::in_job_type, tuple<hdf5_output::in_job_type>>;
 
 int main()
 {
@@ -32,6 +35,24 @@ int main()
     util::RandomForestVectorType rf_vector;
     util::get_rfs_from_file(rf_vector, rf_filename, rf_path, 4);
 
+    // read raw data (chunked and cached)
+    const std::string raw_file_name = "./testraw.h5";
+    const std::string dataset_name = "/exported_data";
+    vigra::HDF5File in_hdf5_file(raw_file_name, vigra::HDF5File::ReadOnly);
+    vigra::ChunkedArrayHDF5<3, uint8_t> in_data(in_hdf5_file, dataset_name, vigra::HDF5File::ReadOnly);
+    vigra::TinyVector<int64_t, 3> blockShape(64, 64, 64);
+    vigra::TinyVector<int64_t, 3> coordBegin(0.0, 0.0, 0.0);
+    utils::Blocking<3> blocking(coordBegin, in_data.shape(), blockShape);
+
+    // reserve output
+    const std::string out_file_name = "./out.h5";
+    vigra::HDF5File out_hdf5_file(out_file_name, vigra::HDF5File::New);
+    auto in_shape = in_data.shape();
+    auto out_shape = util::append_to_shape<3>(in_shape, 2); // TODO: make this dependent on the selected features!
+    std::cout << "Trying to set up output file " << out_file_name << " with dataset " << dataset_name << " and shape " << out_shape << std::endl;
+    vigra::TinyVector<int64_t, 4> chunkSize(128.0, 128.0, 128.0, 1);
+    vigra::ChunkedArrayHDF5<4, float> out_data(out_hdf5_file, dataset_name, vigra::HDF5File::New, out_shape, chunkSize);
+
     // TODO: read selected features
     feature_computer3u8f::selected_features_type selected_features = {std::make_pair("GaussianSmoothing", 1.0f), std::make_pair("GaussianSmoothing", 3.5f)};
 
@@ -39,20 +60,15 @@ int main()
     graph g;
     feature_computer3u8f_node feature_computer(g, std::make_shared<feature_computer3u8f>(cancelled_job_ids, selected_features));
     random_forest_predictor3f_node rf_predictor(g, std::make_shared<random_forest_predictor3f>(rf_vector, cancelled_job_ids));
-    make_edge(get<feature_computer3u8f::OUT_FEATURES>(feature_computer.output_ports()), rf_predictor);
+    hdf5_output_node hdf5_writer(g, std::make_shared<hdf5_output>(cancelled_job_ids, out_data, blocking), serial);
 
-    // read raw data (chunked and cached)
-    const std::string raw_file_name = "./testraw.h5";
-    const std::string dataset_name = "exported_data";
-    vigra::HDF5File hdf5_file(raw_file_name, vigra::HDF5File::ReadOnly);
-    vigra::ChunkedArrayHDF5<3, uint8_t> in_data(hdf5_file, dataset_name, vigra::HDF5File::ReadOnly);
+    make_edge(get<feature_computer3u8f::OUT_FEATURES>(feature_computer.output_ports()), rf_predictor);
+    make_edge(get<random_forest_predictor3f::OUT_PREDICTION>(rf_predictor.output_ports()), hdf5_writer);
 
     // process blocks
-    vigra::TinyVector<int64_t, 3> blockShape(64, 64, 64);
-    vigra::TinyVector<int64_t, 3> coordBegin(0.0, 0.0, 0.0);
-    utils::Blocking<3> blocking(coordBegin, in_data.shape(), blockShape);
     std::cout << "found a dataset of shape " << in_data.shape() << " and " << blocking.numberOfBlocks() << " blocks" << std::endl;
     for (size_t i = 0; i < blocking.numberOfBlocks(); ++i)
+//    for (size_t i = 0; i < 1; ++i)
     {
         // TODO: get halo!
         utils::Block<3> block = blocking.getBlock(i);
