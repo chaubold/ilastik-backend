@@ -54,22 +54,44 @@ class sum
     }
 };
 
-class test_operator : public operators::base_operator<tuple<data_type, data_type, data_type>, tuple<data_type> >
+//class test_operator : public operators::base_operator<tuple<data_type, data_type, data_type>, tuple<data_type> >
+//{
+//public:
+//    test_operator(const types::set_of_cancelled_job_ids& setOfCancelledJobIds):
+//        base_operator<tuple<data_type, data_type, data_type>, tuple<data_type> >(setOfCancelledJobIds)
+//    {
+//    }
+
+//    virtual tuple<data_type> executeImpl(const tuple<data_type,data_type, data_type>& a) const
+//    {
+//        std::cout << "Combining jobs of ids " << get<0>(a).job_id << " and " << get<1>(a).job_id << std::endl;
+//        assert(get<0>(a).job_id == get<1>(a).job_id);
+
+//        if(get<0>(a).data && get<1>(a).data)
+//        {
+//            return tuple<data_type>(data_type(get<0>(a).job_id, *get<0>(a).data * *get<1>(a).data));
+//        }
+
+//        return tuple<data_type>(data_type(get<0>(a).job_id));
+//    }
+//};
+
+class test_operator : public operators::base_operator<tuple<data_type>, tuple<data_type> >
 {
 public:
     test_operator(const types::set_of_cancelled_job_ids& setOfCancelledJobIds):
-        base_operator<tuple<data_type, data_type, data_type>, tuple<data_type> >(setOfCancelledJobIds)
+        base_operator<tuple<data_type>, tuple<data_type> >(setOfCancelledJobIds)
     {
     }
 
-    virtual tuple<data_type> executeImpl(const tuple<data_type,data_type, data_type>& a) const
+    virtual tuple<data_type> executeImpl(const tuple<data_type>& a) const
     {
-        std::cout << "Combining jobs of ids " << get<0>(a).job_id << " and " << get<1>(a).job_id << std::endl;
-        assert(get<0>(a).job_id == get<1>(a).job_id);
+//        std::cout << "Combining jobs of ids " << get<0>(a).job_id << " and " << get<1>(a).job_id << std::endl;
+//        assert(get<0>(a).job_id == get<1>(a).job_id);
 
-        if(get<0>(a).data && get<1>(a).data)
+        if(get<0>(a).data)
         {
-            return tuple<data_type>(data_type(get<0>(a).job_id, *get<0>(a).data * *get<1>(a).data));
+            return tuple<data_type>(data_type(get<0>(a).job_id, *get<0>(a).data));
         }
 
         return tuple<data_type>(data_type(get<0>(a).job_id));
@@ -87,13 +109,15 @@ int main()
     function_node<data_type, data_type> squarer(g, unlimited, square());
     function_node<data_type, data_type> cuber(g, unlimited, cube());
     function_node<data_type, int> summer(g, serial, sum(result));
-    flowgraph::multi_inout_node<tuple<data_type, data_type, data_type>, tuple<data_type> > multi_inout_tester(g, std::make_shared<test_operator>(cancelled_job_ids));
+//    flowgraph::multi_inout_node<tuple<data_type, data_type, data_type>, tuple<data_type> > multi_inout_tester(g, std::make_shared<test_operator>(cancelled_job_ids));
+    flowgraph::single_inout_node<data_type, tuple<data_type> > multi_inout_tester(g, std::make_shared<test_operator>(cancelled_job_ids));
 
     make_edge(input, squarer);
     make_edge(input, cuber);
-    make_edge(squarer, get<0>(multi_inout_tester.input_ports()));
-    make_edge(cuber, get<1>(multi_inout_tester.input_ports()));
-    make_edge(input, get<2>(multi_inout_tester.input_ports()));
+//    make_edge(squarer, get<0>(multi_inout_tester.input_ports()));
+//    make_edge(cuber, get<1>(multi_inout_tester.input_ports()));
+//    make_edge(input, get<2>(multi_inout_tester.input_ports()));
+    make_edge(squarer, multi_inout_tester);
     make_edge(multi_inout_tester, summer);
 
     for (int i = 1; i <= 10; ++i)

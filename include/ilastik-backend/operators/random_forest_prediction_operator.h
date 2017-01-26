@@ -17,12 +17,12 @@ namespace ilastikbackend
 {
     namespace operators
     {
-        template<unsigned int DIM, typename DATATYPE, unsigned int NEXTDIM=DIM+1>
-        class random_forest_prediction_operator : public base_operator< tbb::flow::tuple<flowgraph::job_data<vigra::MultiArray<NEXTDIM, DATATYPE>>>, tbb::flow::tuple<flowgraph::job_data<vigra::MultiArray<NEXTDIM, DATATYPE>>> >
+        template<int DIM, typename DATATYPE>
+        class random_forest_prediction_operator : public base_operator< tbb::flow::tuple<flowgraph::job_data<vigra::MultiArray<DIM+1, DATATYPE>>>, tbb::flow::tuple<flowgraph::job_data<vigra::MultiArray<DIM+1, DATATYPE>>> >
         {
         public:
-            using in_array_type = vigra::MultiArray<NEXTDIM, DATATYPE>;
-            using out_array_type = vigra::MultiArray<NEXTDIM, DATATYPE>;
+            using in_array_type = vigra::MultiArray<DIM+1, DATATYPE>;
+            using out_array_type = vigra::MultiArray<DIM+1, DATATYPE>;
             using in_job_type = flowgraph::job_data<in_array_type>;
             using out_job_type = flowgraph::job_data<out_array_type>;
             using base_type = base_operator<tbb::flow::tuple<in_job_type>, tbb::flow::tuple<out_job_type> >;
@@ -79,7 +79,7 @@ namespace ilastikbackend
                 auto prediction_map_shape = in_array.shape();
                 prediction_map_shape[DIM] = num_pixel_classification_labels; // has DIM+1 entries, do DIM is last one
 
-                vigra::MultiArrayView<NEXTDIM, DATATYPE> prediction_map_image_view(prediction_map_shape, prediction_map_view.data());
+                vigra::MultiArrayView<DIM+1, DATATYPE> prediction_map_image_view(prediction_map_shape, prediction_map_view.data());
 
                 std::cout << "done predicting for job " << std::get<IN_FEATURES>(in).job_id << std::endl;
                 return tbb::flow::tuple<out_job_type>(out_job_type(std::get<IN_FEATURES>(in).job_id));

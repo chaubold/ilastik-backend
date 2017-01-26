@@ -124,6 +124,36 @@ namespace ilastikbackend
             std::shared_ptr<operators::base_operator<IN, OUT> > operator_;
         };
 
+        /**
+        * A single_inout_node is a flow graph node that requires a *single* input, and produces several outputs.
+        * It encapsulates a function node that calls an instance of an ilastikbackend::operators::BaseOperator.
+        *
+        * See https://software.intel.com/en-us/node/589717 for an example
+        */
+        template<typename IN, typename OUT>
+        class single_inout_node : public tbb::flow::multifunction_node<IN, OUT>
+        {
+        public:
+            // typedefs
+            using base_type = tbb::flow::multifunction_node<IN, OUT>;
+
+        public:
+            // API
+            single_inout_node(tbb::flow::graph& graph, std::shared_ptr<operators::base_operator<tbb::flow::tuple<IN>, OUT> > baseOp):
+                base_type(graph, tbb::flow::unlimited, [baseOp](const IN& in, typename base_type::output_ports_type &output_ports) -> void {
+                    OUT result = baseOp->execute(std::make_tuple(in));
+                    output_setter<OUT, typename base_type::output_ports_type, std::tuple_size<OUT>::value - 1> os;
+                    os(result, output_ports);
+                }),
+                operator_(baseOp)
+            {
+            }
+
+        private:
+            std::shared_ptr<operators::base_operator<tbb::flow::tuple<IN>, OUT> > operator_;
+        };
+
+
     }
 }
 
