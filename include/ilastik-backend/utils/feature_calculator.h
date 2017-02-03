@@ -1,8 +1,12 @@
+#ifndef _FEATURE_CALCULATOR_H_
+#define _FEATURE_CALCULATOR_H_
+
 #include <map>
 
 #include <vigra/multi_array.hxx> /* for MultiArray */
 #include <vigra/multi_convolution.hxx>
 #include <vigra/multi_tensorutilities.hxx>
+#include <vigra/tinyvector.hxx>
 
 #include "ilastik-backend/utils/random_forest_reader.h" // for append_to_shape
 
@@ -30,6 +34,8 @@ namespace ilastikbackend
             int calculate(
                     const vigra::MultiArrayView<N, DataType>& image,
                     vigra::MultiArray<N+1, DataType>& features);
+
+            vigra::TinyVector<float, N> getHaloShape();
         private:
             int calculate_gaussian_smoothing(
                     const vigra::MultiArrayView<N, DataType>& image,
@@ -66,6 +72,23 @@ namespace ilastikbackend
             std::map<std::string, size_t> feature_sizes_;
             vigra::ConvolutionOptions<N> conv_options_;
         };
+
+        template<int N, typename DataType>
+        vigra::TinyVector<float, N> FeatureCalculator<N, DataType>::getHaloShape() {
+            vigra::TinyVector<float, N> ret;
+            size_t halo_size = 0;
+            for (
+                 typename StringDataPairVectorType::const_iterator it = feature_scales_.begin();
+                 it != feature_scales_.end();
+                 it++
+                 )
+            {
+                halo_size = std::max(size_t(round(3.5 * it->second)), halo_size);
+            }
+
+            std::fill(ret.begin(), ret.end(), halo_size);
+            return ret;
+        }
 
         ////
         //// class FeatureCalculator
@@ -379,3 +402,5 @@ namespace ilastikbackend
         }
     }
 }
+
+#endif // _FEATURE_CALCULATOR_H_
