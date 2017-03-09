@@ -7,7 +7,7 @@
 
 namespace ilastikbackend
 {
-    namespace util
+    namespace utils
     {
         typedef size_t LabelType;
         typedef vigra::RandomForest<LabelType> RandomForestType;

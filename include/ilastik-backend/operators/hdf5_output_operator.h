@@ -44,7 +44,7 @@ namespace ilastikbackend
                 std::cout << "saving result for job" << job_id << std::endl;
 
                 const in_array_type& in_array = (*std::get<IN_DATA>(in).data);
-                auto block_start = util::append_to_shape<DIM-1>(blocking_.getBlock(job_id).begin(), 0);
+                auto block_start = utils::append_to_shape<DIM-1>(blocking_.getBlock(job_id).begin(), 0);
                 std::cout << "saving block from " << block_start << " with shape " << in_array.shape() << " into array " << out_array_.shape() << std::endl;
                 try{
                     out_array_.commitSubarray(block_start, in_array);

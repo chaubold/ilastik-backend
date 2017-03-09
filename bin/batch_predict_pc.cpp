@@ -35,8 +35,8 @@ int main()
     const std::string rf_path = "/PixelClassification/ClassifierForests/Forest";
 //    const std::string rf_filename = "/Users/chaubold/Desktop/ilastik_hackathon/hackathon_flyem_forest.h5";
 //    const std::string rf_path = "/Forest";
-    util::RandomForestVectorType rf_vector;
-    util::get_rfs_from_file(rf_vector, rf_filename, rf_path, 4);
+    utils::RandomForestVectorType rf_vector;
+    utils::get_rfs_from_file(rf_vector, rf_filename, rf_path, 4);
 
     // read raw data (chunked and cached)
     const std::string raw_file_name = "./testraw.h5";
@@ -69,7 +69,7 @@ int main()
 //        std::make_tuple("HessianOfGaussianEigenvalues", 1.6f),
 //        std::make_tuple("HessianOfGaussianEigenvalues", 5.0f)
 //    };
-    util::FeatureCalculator<3, float> feature_calculator(selected_features);
+    utils::FeatureCalculator<3, float> feature_calculator(selected_features);
     size_t num_feature_channels = feature_calculator.get_feature_size();
     vigra::TinyVector<float, 3> halo = feature_calculator.getHaloShape();
     std::cout << "using halo of size: " << halo << std::endl;
@@ -78,7 +78,7 @@ int main()
     const std::string out_file_name = "./out.h5";
     vigra::HDF5File out_hdf5_file(out_file_name, vigra::HDF5File::New);
     auto in_shape = in_data.shape();
-    auto out_shape = util::append_to_shape<3>(in_shape, num_feature_channels); // TODO: make this dependent on the selected features!
+    auto out_shape = utils::append_to_shape<3>(in_shape, num_feature_channels); // TODO: make this dependent on the selected features!
     std::cout << "Trying to set up output file " << out_file_name << " with dataset " << dataset_name << " and shape " << out_shape << std::endl;
     vigra::TinyVector<int64_t, 4> chunkSize(64.0, 64.0, 64.0, 1);
     vigra::ChunkedArrayHDF5<4, float> out_data(out_hdf5_file, dataset_name, vigra::HDF5File::New, out_shape, chunkSize);

@@ -12,7 +12,7 @@
 
 namespace ilastikbackend
 {
-    namespace util
+    namespace utils
     {
         template<int N, typename DataType>
         class FeatureCalculator

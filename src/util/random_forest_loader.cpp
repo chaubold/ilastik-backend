@@ -6,7 +6,7 @@
 
 namespace ilastikbackend
 {
-    namespace util
+    namespace utils
     {
         std::string zero_padding(int num, int n_zeros)
         {

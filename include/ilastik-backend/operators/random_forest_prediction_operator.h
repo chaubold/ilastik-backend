@@ -34,7 +34,7 @@ namespace ilastikbackend
         public:
             // API
             random_forest_prediction_operator(
-                const util::RandomForestVectorType& random_forest_vector,
+                const utils::RandomForestVectorType& random_forest_vector,
                 const types::set_of_cancelled_job_ids& setOfCancelledJobIds
             ):
                 base_type(setOfCancelledJobIds),
@@ -88,7 +88,7 @@ namespace ilastikbackend
             }
 
         private:
-            const util::RandomForestVectorType& random_forest_vector_;
+            const utils::RandomForestVectorType& random_forest_vector_;
         };
     } // namespace operators
 } // namespace ilastik_backend

@@ -52,7 +52,7 @@ namespace ilastikbackend
                 vigra::MultiArray<DIM, OUT_TYPE> in_array_out_type(in_array);
 
                 out_array_type out_array;
-                util::FeatureCalculator<DIM, OUT_TYPE> feature_calculator(selected_features_);
+                utils::FeatureCalculator<DIM, OUT_TYPE> feature_calculator(selected_features_);
                 feature_calculator.calculate(in_array_out_type, out_array);
 
                 // resize the out array to cut the halo
