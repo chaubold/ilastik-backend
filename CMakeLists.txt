@@ -80,7 +80,8 @@ if(WITH_TESTS)
 endif()
 
 if(WITH_PYTHON)
-  add_subdirectory(python)
+    add_subdirectory(externals/pybind11)
+    add_subdirectory(python)
 endif()
 
 add_subdirectory(bin)
