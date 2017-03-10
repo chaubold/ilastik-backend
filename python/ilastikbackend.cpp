@@ -20,14 +20,14 @@ py::array_t<DTYPE, py::array::c_style | py::array::forcecast> add(py::array_t<DT
 
 void export_pixel_classification(pybind11::module& m)
 {
-    export_pixel_classificationT<2, uint8_t, double>(m, "uint8");
-    export_pixel_classificationT<3, uint8_t, double>(m, "uint8");
+    export_pixel_classificationT<2, uint8_t, float>(m, "uint8");
+    export_pixel_classificationT<3, uint8_t, float>(m, "uint8");
 
-    export_pixel_classificationT<2, uint16_t, double>(m, "uint16");
-    export_pixel_classificationT<3, uint16_t, double>(m, "uint16");
+    export_pixel_classificationT<2, uint16_t, float>(m, "uint16");
+    export_pixel_classificationT<3, uint16_t, float>(m, "uint16");
 
-    export_pixel_classificationT<2, double, double>(m, "float");
-    export_pixel_classificationT<3, double, double>(m, "float");
+    export_pixel_classificationT<2, float, float>(m, "float32");
+    export_pixel_classificationT<3, float, float>(m, "float32");
 }
 
 void export_blocking(py::module& m)
@@ -41,7 +41,7 @@ PYBIND11_PLUGIN(pyilastikbackend) {
     py::module m("pyilastikbackend", "python ilastik backend module providing feature computation "
                                      "and pixel classification methods on blocks");
 
-    m.def("add_2d_Float", &add<2,double>, "A function which adds two arrays", py::arg().noconvert(), py::arg().noconvert());
+    m.def("add_2d_Float", &add<2,float>, "A function which adds two arrays", py::arg().noconvert(), py::arg().noconvert());
     m.def("add_2d_Uint8", &add<2,uint8_t>, "A function which adds two arrays", py::arg().noconvert(), py::arg().noconvert());
 
     export_pixel_classification(m);

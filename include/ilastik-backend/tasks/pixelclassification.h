@@ -24,7 +24,7 @@ class pixel_classification_task
 {
 public:
     // typedefs
-    using selected_features_type = std::vector<std::pair<std::string, double>>;
+    using selected_features_type = std::vector<std::pair<std::string, OUT_TYPE>>;
     using coordinate = vigra::TinyVector<int64_t, DIM>;
     using multichannel_coordinate = vigra::TinyVector<int64_t, DIM+1>;
     using raw_array_type = vigra::MultiArrayView<DIM, IN_TYPE>;

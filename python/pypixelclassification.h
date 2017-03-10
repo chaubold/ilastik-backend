@@ -18,7 +18,7 @@ public:
     using np_raw_array = pybind11::array_t<IN_TYPE, pybind11::array::c_style | pybind11::array::forcecast>;
     using np_features_array = pybind11::array_t<IN_TYPE, pybind11::array::c_style | pybind11::array::forcecast>;
     using np_predictions_array = np_features_array;
-    using selected_features_type = std::vector<std::pair<std::string, double>>;
+    using selected_features_type = std::vector<std::pair<std::string, OUT_TYPE>>;
 
 public:
     PyPixelClassification(){}
