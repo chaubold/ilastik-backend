@@ -53,12 +53,13 @@ public:
         is_cache_valid_ = false;
     }
 
-    void load_random_forest(const std::string& filename, const std::string& path_in_file)
+    void load_random_forest(const std::string& filename, const std::string& path_in_file, size_t num_zeros_in_forest_name)
     {
-        // TODO implement me
+        if(!utils::get_rfs_from_file(random_forest_vector_, filename, path_in_file, num_zeros_in_forest_name))
+            throw std::runtime_error("Error when loading random forest!");
     }
 
-    void save_random_forest(const std::string& filename, const std::string& path_in_file)
+    void save_random_forest(const std::string& filename, const std::string& path_in_file, size_t num_zeros_in_forest_name)
     {
         // TODO implement me
     }

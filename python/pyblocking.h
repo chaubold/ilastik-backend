@@ -112,6 +112,9 @@ public:
     const coordinate_array blocksPerAxisStrides() const
     { return tiny_vector_to_numpy<DIM, coordinate_type>(blocking_.blocksPerAxisStrides()); }
 
+    const size_t numberOfBlocks() const
+    { return blocking_.numberOfBlocks(); }
+
     ilastikbackend::utils::Blocking<DIM> getBlocking() const
     { return blocking_; }
 
@@ -153,6 +156,7 @@ void export_blockingT(pybind11::module& m)
         .def_property_readonly("blockShift",&PyBlocking<DIM>::blockShift)
         .def_property_readonly("blocksPerAxis",&PyBlocking<DIM>::blocksPerAxis)
         .def_property_readonly("blocksPerAxisStrides",&PyBlocking<DIM>::blocksPerAxisStrides)
+        .def_property_readonly("numberOfBlocks",&PyBlocking<DIM>::numberOfBlocks)
     ;
 }
 

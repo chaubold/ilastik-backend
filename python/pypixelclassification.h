@@ -34,14 +34,14 @@ public:
         pixelclassification_.configure_selected_features(features);
     }
 
-    void load_random_forest(const std::string& filename, const std::string& path_in_file)
+    void load_random_forest(const std::string& filename, const std::string& path_in_file, size_t num_zeros_in_forest_name)
     {
-        pixelclassification_.load_random_forest(filename, path_in_file);
+        pixelclassification_.load_random_forest(filename, path_in_file, num_zeros_in_forest_name);
     }
 
-    void save_random_forest(const std::string& filename, const std::string& path_in_file)
+    void save_random_forest(const std::string& filename, const std::string& path_in_file, size_t num_zeros_in_forest_name)
     {
-        pixelclassification_.save_random_forest(filename, path_in_file);
+        pixelclassification_.save_random_forest(filename, path_in_file, num_zeros_in_forest_name);
     }
 
     np_features_array compute_features_of_block(size_t blockIndex, const np_raw_array& raw_data)
