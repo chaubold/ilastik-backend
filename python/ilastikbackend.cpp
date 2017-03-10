@@ -2,6 +2,8 @@
 #include <vigra/multi_math.hxx>
 
 #include "vigraconverter.h"
+#include "pyblocking.h"
+#include "pypixelclassification.h"
 
 namespace py = pybind11;
 
@@ -16,11 +18,23 @@ py::array_t<DTYPE, py::array::c_style | py::array::forcecast> add(py::array_t<DT
     return vigra_to_numpy<DIM, DTYPE>(vigraResult);
 }
 
+void export_pixel_classification(pybind11::module& m)
+{
+    export_pixel_classificationT<2, uint8_t, double>(m, "uint8");
+    export_pixel_classificationT<3, uint8_t, double>(m, "uint8");
 
+    export_pixel_classificationT<2, uint16_t, double>(m, "uint16");
+    export_pixel_classificationT<3, uint16_t, double>(m, "uint16");
 
-// defined in the other CPP files
-void export_pixel_classification(py::module &);
-void export_blocking(py::module &);
+    export_pixel_classificationT<2, double, double>(m, "float");
+    export_pixel_classificationT<3, double, double>(m, "float");
+}
+
+void export_blocking(py::module& m)
+{
+    export_blockingT<2>(m);
+    export_blockingT<3>(m);
+}
 
 
 PYBIND11_PLUGIN(pyilastikbackend) {

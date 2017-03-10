@@ -71,7 +71,7 @@ int main()
 //    };
     utils::FeatureCalculator<3, float> feature_calculator(selected_features);
     size_t num_feature_channels = feature_calculator.get_feature_size();
-    vigra::TinyVector<float, 3> halo = feature_calculator.getHaloShape();
+    vigra::TinyVector<int64_t, 3> halo = feature_calculator.getHaloShape();
     std::cout << "using halo of size: " << halo << std::endl;
 
     // reserve output

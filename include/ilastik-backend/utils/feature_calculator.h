@@ -35,7 +35,7 @@ namespace ilastikbackend
                     const vigra::MultiArrayView<N, DataType>& image,
                     vigra::MultiArray<N+1, DataType>& features);
 
-            vigra::TinyVector<float, N> getHaloShape();
+            vigra::TinyVector<int64_t, N> getHaloShape();
         private:
             int calculate_gaussian_smoothing(
                     const vigra::MultiArrayView<N, DataType>& image,
@@ -67,15 +67,15 @@ namespace ilastikbackend
             vigra::MultiArray<N, vigra::TinyVector<DataType, (N*(N+1))/2> > tensor_temp_;
             vigra::MultiArray<N, vigra::TinyVector<DataType, N> > eigenvalue_temp_;
 
-            const StringDataPairVectorType& feature_scales_;
+            StringDataPairVectorType feature_scales_;
             DataType window_size_;
             std::map<std::string, size_t> feature_sizes_;
             vigra::ConvolutionOptions<N> conv_options_;
         };
 
         template<int N, typename DataType>
-        vigra::TinyVector<float, N> FeatureCalculator<N, DataType>::getHaloShape() {
-            vigra::TinyVector<float, N> ret;
+        vigra::TinyVector<int64_t, N> FeatureCalculator<N, DataType>::getHaloShape() {
+            vigra::TinyVector<int64_t, N> ret;
             size_t halo_size = 0;
             for (
                  typename StringDataPairVectorType::const_iterator it = feature_scales_.begin();

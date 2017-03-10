@@ -95,6 +95,15 @@ namespace ilastikbackend{
             typedef typename BlockWithHaloType::ValueType value_type;
             typedef typename BlockWithHaloType::VectorType VectorType;
 
+            Blocking():
+                roiEnd_(VectorType(0)),
+                blockShape_(VectorType(0)),
+                blockShift_(VectorType(0)),
+                blocksPerAxis_(VectorType(0)),
+                blocksPerAxisStrides_(VectorType(0)),
+                numberOfBlocks_(0)
+            {}
+
             Blocking(
                     const VectorType & roiBegin,
                     const VectorType & roiEnd,

@@ -1,3 +1,6 @@
+#ifndef PYBLOCKING_H
+#define PYBLOCKING_H
+
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
@@ -5,11 +8,8 @@
 
 #include "ilastik-backend/utils/blocking.h"
 
-namespace py = pybind11;
-using namespace ilastikbackend;
-
 using coordinate_type = int64_t;
-using coordinate_array = py::array_t<coordinate_type, pybind11::array::c_style | pybind11::array::forcecast>;
+using coordinate_array = pybind11::array_t<coordinate_type, pybind11::array::c_style | pybind11::array::forcecast>;
 
 // ------------------------------------------------------------------------------------
 template<int DIM>
@@ -20,7 +20,7 @@ public:
                numpy_to_tiny_vector<DIM, coordinate_type>(end))
     {}
 
-    PyBlock(const utils::Block<DIM>& block):
+    PyBlock(const ilastikbackend::utils::Block<DIM>& block):
         block_(block)
     {}
 
@@ -34,7 +34,7 @@ public:
     { return tiny_vector_to_numpy<DIM, coordinate_type>(block_.shape()); }
 
 private:
-    utils::Block<DIM> block_;
+    ilastikbackend::utils::Block<DIM> block_;
 };
 
 // ------------------------------------------------------------------------------------
@@ -46,7 +46,7 @@ public:
                numpy_to_tiny_vector<DIM, coordinate_type>(innerBlock))
     {}
 
-    PyBlockWithHalo(const utils::BlockWithHalo<DIM>& block):
+    PyBlockWithHalo(const ilastikbackend::utils::BlockWithHalo<DIM>& block):
         block_(block)
     {}
 
@@ -59,7 +59,7 @@ public:
     const PyBlock<DIM> innerBlockLocal() const
     { return PyBlock<DIM>(block_.innerBlockLocal()); }
 private:
-    utils::BlockWithHalo<DIM> block_;
+    ilastikbackend::utils::BlockWithHalo<DIM> block_;
 };
 
 // ------------------------------------------------------------------------------------
@@ -82,6 +82,10 @@ public:
                   numpy_to_tiny_vector<DIM, coordinate_type>(roiEnd),
                   numpy_to_tiny_vector<DIM, coordinate_type>(blockShape),
                   numpy_to_tiny_vector<DIM, coordinate_type>(blockShift))
+    {}
+
+    PyBlocking(ilastikbackend::utils::Blocking<DIM> blocking):
+        blocking_(blocking)
     {}
 
     PyBlock<DIM> getBlock(const uint64_t blockIndex) const
@@ -108,36 +112,39 @@ public:
     const coordinate_array blocksPerAxisStrides() const
     { return tiny_vector_to_numpy<DIM, coordinate_type>(blocking_.blocksPerAxisStrides()); }
 
+    ilastikbackend::utils::Blocking<DIM> getBlocking() const
+    { return blocking_; }
+
 private:
-    utils::Blocking<DIM> blocking_;
+    ilastikbackend::utils::Blocking<DIM> blocking_;
 };
 
 // ------------------------------------------------------------------------------------
 template<int DIM>
-void export_blockingT(py::module& m)
+void export_blockingT(pybind11::module& m)
 {
     const auto dim_str = std::string("_") + std::to_string(DIM) + std::string("d");
 
     const auto block_class_name = std::string("Block") + dim_str;
-    py::class_<PyBlock<DIM>>(m, block_class_name.c_str())
-        .def(py::init<coordinate_array, coordinate_array>())
+    pybind11::class_<PyBlock<DIM>>(m, block_class_name.c_str())
+        .def(pybind11::init<coordinate_array, coordinate_array>())
         .def_property_readonly("begin",&PyBlock<DIM>::begin)
         .def_property_readonly("end",&PyBlock<DIM>::end)
         .def_property_readonly("shape",&PyBlock<DIM>::shape)
     ;
 
     const auto block_halo_class_name= std::string("BlockWithHalo") + dim_str;
-    py::class_<PyBlockWithHalo<DIM>>(m, block_halo_class_name.c_str())
-        .def(py::init<coordinate_array, coordinate_array>())
+    pybind11::class_<PyBlockWithHalo<DIM>>(m, block_halo_class_name.c_str())
+        .def(pybind11::init<coordinate_array, coordinate_array>())
         .def_property_readonly("outerBlock",&PyBlockWithHalo<DIM>::outerBlock)
         .def_property_readonly("innerBlock",&PyBlockWithHalo<DIM>::innerBlock)
         .def_property_readonly("innerBlockLocal",&PyBlockWithHalo<DIM>::innerBlockLocal)
     ;
 
     const auto blocking_class_name = std::string("Blocking") + dim_str;
-    py::class_<PyBlocking<DIM>>(m, blocking_class_name.c_str())
-        .def(py::init<coordinate_array, coordinate_array, coordinate_array, coordinate_array>())
-        .def(py::init<coordinate_array, coordinate_array, coordinate_array>())
+    pybind11::class_<PyBlocking<DIM>>(m, blocking_class_name.c_str())
+        .def(pybind11::init<coordinate_array, coordinate_array, coordinate_array, coordinate_array>())
+        .def(pybind11::init<coordinate_array, coordinate_array, coordinate_array>())
         .def("getBlock",&PyBlocking<DIM>::getBlock)
         .def("getBlockWithHalo",&PyBlocking<DIM>::getBlockWithHalo)
         .def_property_readonly("roiBegin",&PyBlocking<DIM>::roiBegin)
@@ -149,8 +156,4 @@ void export_blockingT(py::module& m)
     ;
 }
 
-void export_blocking(py::module& m)
-{
-    export_blockingT<2>(m);
-    export_blockingT<3>(m);
-}
+#endif // PYBLOCKING_H
