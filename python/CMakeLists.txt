@@ -1,1 +1,1 @@
-pybind11_add_module(pyilastikbackend ilastikbackend.cpp)
+pybind11_add_module(pyilastikbackend ilastikbackend.cpp pyblocking.cpp pypixelclassification.cpp vigraconverter.h)
