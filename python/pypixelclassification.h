@@ -2,6 +2,7 @@
 #define PYPIXELCLASSIFICATION_H
 
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 #include "vigraconverter.h"
 #include "pyblocking.h"
