@@ -9,7 +9,7 @@
 #include "ilastik-backend/utils/blocking.h"
 
 using coordinate_type = int64_t;
-using coordinate_array = pybind11::array_t<coordinate_type, pybind11::array::c_style | pybind11::array::forcecast>;
+using coordinate_array = pybind11::array_t<coordinate_type, pybind11::array::f_style | pybind11::array::forcecast>;
 
 // ------------------------------------------------------------------------------------
 template<int DIM>

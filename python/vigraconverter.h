@@ -6,9 +6,24 @@
 #include <vigra/multi_array.hxx>
 #include <vigra/tinyvector.hxx>
 #include <exception>
+#include <iostream>
+
+template<typename T>
+std::ostream& operator<<(std::ostream& out, const std::vector<T>& vec)
+{
+    out << "(";
+    for(size_t i = 0; i < vec.size() - 1; i++)
+    {
+        out << vec[i] << ", ";
+    }
+    if(vec.size() > 0)
+        out << vec.back();
+    out << ")";
+    return out;
+}
 
 template<int DIM, typename DTYPE>
-vigra::MultiArrayView<DIM, DTYPE> numpy_to_vigra(pybind11::array_t<DTYPE, pybind11::array::c_style | pybind11::array::forcecast> py_array)
+vigra::MultiArrayView<DIM, DTYPE> numpy_to_vigra(pybind11::array_t<DTYPE, pybind11::array::f_style | pybind11::array::forcecast> py_array)
 {
     pybind11::buffer_info info = py_array.request();
     /**
@@ -40,7 +55,7 @@ vigra::MultiArrayView<DIM, DTYPE> numpy_to_vigra(pybind11::array_t<DTYPE, pybind
 }
 
 template<int DIM, typename DTYPE>
-pybind11::array_t<DTYPE, pybind11::array::c_style | pybind11::array::forcecast> vigra_to_numpy(vigra::MultiArrayView<DIM, DTYPE> vigra_array)
+pybind11::array_t<DTYPE, pybind11::array::f_style | pybind11::array::forcecast> vigra_to_numpy(vigra::MultiArrayView<DIM, DTYPE> vigra_array)
 {
     std::vector<size_t> strides;
     std::vector<size_t> shape;
@@ -57,7 +72,7 @@ pybind11::array_t<DTYPE, pybind11::array::c_style | pybind11::array::forcecast> 
 }
 
 template<int DIM, typename DTYPE>
-const vigra::TinyVector<DTYPE, DIM> numpy_to_tiny_vector(pybind11::array_t<DTYPE, pybind11::array::c_style | pybind11::array::forcecast> py_array)
+const vigra::TinyVector<DTYPE, DIM> numpy_to_tiny_vector(pybind11::array_t<DTYPE, pybind11::array::f_style | pybind11::array::forcecast> py_array)
 {
     pybind11::buffer_info info = py_array.request();
 
@@ -82,7 +97,7 @@ const vigra::TinyVector<DTYPE, DIM> numpy_to_tiny_vector(pybind11::array_t<DTYPE
 }
 
 template<int DIM, typename DTYPE>
-pybind11::array_t<DTYPE, pybind11::array::c_style | pybind11::array::forcecast> tiny_vector_to_numpy(vigra::TinyVector<DTYPE, DIM> tiny_vec)
+pybind11::array_t<DTYPE, pybind11::array::f_style | pybind11::array::forcecast> tiny_vector_to_numpy(vigra::TinyVector<DTYPE, DIM> tiny_vec)
 {
     std::vector<size_t> strides = { sizeof(DTYPE) };
     std::vector<size_t> shape = { DIM };
