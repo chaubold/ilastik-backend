@@ -26,9 +26,9 @@ doc = Autodoc(app)
 pixelClassificationBackend = None
 
 # --------------------------------------------------------------
-def processBlock(blockIdx):
+def getBlockRawData(blockIdx):
     '''
-    Main computational method for processing blocks
+    Get the raw data of a block
     '''
     assert 0 <= blockIdx < pixelClassificationBackend.blocking.numberOfBlocks, "Invalid blockIdx selected"
 
@@ -40,31 +40,79 @@ def processBlock(blockIdx):
         elif dim == 3:
             rawData = f[options.raw_data_path][roi.begin[0]:roi.end[0], roi.begin[1]:roi.end[1], roi.begin[2]:roi.end[2]]
 
+    return rawData
+
+def processBlock(blockIdx):
+    '''
+    Main computational method for processing blocks
+    '''
+    assert 0 <= blockIdx < pixelClassificationBackend.blocking.numberOfBlocks, "Invalid blockIdx selected"
+    rawData = getBlockRawData(blockIdx)
+
+    print("Input block min {} max {} dtype {} shape {}".format(rawData.min(), rawData.max(), rawData.dtype, rawData.shape))
+    print("ArrayFlags: {}".format(rawData.flags))
+    # array.flags['C_CONTIGUOUS']
     features = pixelClassificationBackend.computeFeaturesOfBlock(blockIdx, rawData)
+    print("Feature block min {} max {} dtype {} shape {}".format(features.min(), features.max(), features.dtype, features.shape))
+    print("ArrayFlags: {}".format(features.flags))
     predictions = pixelClassificationBackend.computePredictionsOfBlock(blockIdx, features)
+    print("Prediction block min {} max {} dtype {} shape {}".format(predictions.min(), predictions.max(), predictions.dtype, predictions.shape))
+    print("ArrayFlags: {}".format(predictions.flags))
 
     return predictions
 
 # --------------------------------------------------------------
-@app.route('/prediction/<format>/<int:blockIdx>')
+@app.route('/raw/<format>/<int:blockIdx>')
 @doc.doc()
-def get_prediction(format, blockIdx):
+def get_raw(format, blockIdx):
     '''
-    Get a predicted block in the specified format (raw / tiff / png).
+    Get the raw data of a block in the specified format (raw / tiff / png /hdf5 ).
 
     '''
-    assert format in ['raw', 'tiff', 'png'], "Invalid Format selected"
+    assert format in ['raw', 'tiff', 'png', 'hdf5'], "Invalid Format selected"
 
-    data = processBlock(blockIdx)
+    data = getBlockRawData(blockIdx)
 
     if format == 'raw':
-        data = np.asarray(data, order='C')
         stream = VoxelsNddataCodec(data.dtype).create_encoded_stream_from_ndarray(data)
         return send_file(stream, mimetype=VoxelsNddataCodec.VOLUME_MIMETYPE)
     elif format in ('tiff', 'png'):
         _, fname = tempfile.mkstemp(suffix='.'+format)
         vigra.impex.writeImage(data.squeeze(), fname, dtype='NBYTE')
         # TODO: delete file?
+        return send_file(fname)
+    elif format == 'hdf5':
+        _, fname = tempfile.mkstemp(suffix='.'+format)
+        with h5py.File(fname, 'w') as f:
+            f.create_dataset('exported_data', data=data)
+        return send_file(fname)
+    else:
+        raise RuntimeError("unsupported format: {}".format(format))
+
+# --------------------------------------------------------------
+@app.route('/prediction/<format>/<int:blockIdx>')
+@doc.doc()
+def get_prediction(format, blockIdx):
+    '''
+    Get a predicted block in the specified format (raw / tiff / png / hdf5).
+
+    '''
+    assert format in ['raw', 'tiff', 'png', 'hdf5'], "Invalid Format selected"
+
+    data = processBlock(blockIdx)
+
+    if format == 'raw':
+        stream = VoxelsNddataCodec(data.dtype).create_encoded_stream_from_ndarray(data)
+        return send_file(stream, mimetype=VoxelsNddataCodec.VOLUME_MIMETYPE)
+    elif format in ('tiff', 'png'):
+        _, fname = tempfile.mkstemp(suffix='.'+format)
+        vigra.impex.writeImage(data.squeeze(), fname, dtype='NBYTE')
+        # TODO: delete file?
+        return send_file(fname)
+    elif format == 'hdf5':
+        _, fname = tempfile.mkstemp(suffix='.'+format)
+        with h5py.File(fname, 'w') as f:
+            f.create_dataset('exported_data', data=data)
         return send_file(fname)
     else:
         raise RuntimeError("unsupported format: {}".format(format))
