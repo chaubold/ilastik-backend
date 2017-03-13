@@ -58,7 +58,7 @@ namespace ilastikbackend{
                   innerBlockLocal_(){
 
 
-                const auto lBegin = innerBlock.begin()  - outerBlock.begin();
+                const auto lBegin = innerBlock.begin() - outerBlock.begin();
                 const auto lEnd = lBegin  + innerBlock_.shape();
                 innerBlockLocal_ = BlockType(lBegin, lEnd);
             }

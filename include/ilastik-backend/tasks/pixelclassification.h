@@ -94,7 +94,7 @@ public:
         coreBegin[DIM] = 0;
         coreShape[DIM] = feature_calculator_->get_feature_size();
 
-        return out_array.subarray(coreBegin, coreShape);
+        return out_array.subarray(coreBegin, coreBegin + coreShape);
     }
 
     predictions_array_type predict_for_block(size_t blockIndex, const features_array_type& feature_data)
