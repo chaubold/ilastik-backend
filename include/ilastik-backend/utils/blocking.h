@@ -160,8 +160,19 @@ namespace ilastikbackend{
                 return numberOfBlocks_;
             }
 
+            const uint64_t getSurroundingBlockIndex(const VectorType& coordinate) const {
+                uint64_t index = 0;
 
+                for(auto d=0; d<DIM; ++d){
+                    if(coordinate[d] < roiBegin_[d] || coordinate[d] > roiEnd_[d])
+                        throw std::runtime_error("Cannot determine block index of coordinate outside the blocking region!");
+                    ValueType localCoordAtD = coordinate[d] - (roiBegin_[d] - blockShift_[d]);
+                    const int64_t blockCoordAtD = localCoordAtD / blockShape_[d];
+                    index += blockCoordAtD*blocksPerAxisStrides_[d];
+                }
 
+                return index;
+            }
 
             BlockType getBlock(const uint64_t blockIndex)const{
 

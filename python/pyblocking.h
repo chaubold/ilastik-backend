@@ -94,6 +94,10 @@ public:
     PyBlockWithHalo<DIM> getBlockWithHalo(const uint64_t blockIndex, coordinate_array halo) const
     { return PyBlockWithHalo<DIM>(blocking_.getBlockWithHalo(blockIndex, numpy_to_tiny_vector<DIM, coordinate_type>(halo))); }
 
+    const uint64_t getSurroundingBlockIndex(coordinate_array coordinate) const {
+        return blocking_.getSurroundingBlockIndex(numpy_to_tiny_vector<DIM, coordinate_type>(coordinate));
+    }
+
     const coordinate_array roiBegin() const
     { return tiny_vector_to_numpy<DIM, coordinate_type>(blocking_.roiBegin()); }
 
@@ -150,6 +154,7 @@ void export_blockingT(pybind11::module& m)
         .def(pybind11::init<coordinate_array, coordinate_array, coordinate_array>())
         .def("getBlock",&PyBlocking<DIM>::getBlock)
         .def("getBlockWithHalo",&PyBlocking<DIM>::getBlockWithHalo)
+        .def("getSurroundingBlockIndex",&PyBlocking<DIM>::getSurroundingBlockIndex)
         .def_property_readonly("roiBegin",&PyBlocking<DIM>::roiBegin)
         .def_property_readonly("roiEnd",&PyBlocking<DIM>::roiEnd)
         .def_property_readonly("blockShape",&PyBlocking<DIM>::blockShape)
