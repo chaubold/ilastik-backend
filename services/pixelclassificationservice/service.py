@@ -5,10 +5,13 @@ The pixel classification service can take raw data and compute features and pred
 import json
 import tempfile
 import argparse
+import sys
+import traceback
 import numpy as np
 import h5py
 import vigra
 from pprint import pprint
+import redis
 
 from flask import Flask, send_file, request
 from flask_autodoc import Autodoc
@@ -22,8 +25,9 @@ from voxels_nddata_codec import VoxelsNddataCodec
 app = Flask("pixelclassificationservice")
 doc = Autodoc(app)
 
-# global variable storing the backend instance
+# global variable storing the backend instance and the redis client
 pixelClassificationBackend = None
+redisClient = None
 
 # --------------------------------------------------------------
 # Helper methods
@@ -54,16 +58,34 @@ def processBlock(blockIdx):
     assert 0 <= blockIdx < pixelClassificationBackend.blocking.numberOfBlocks, "Invalid blockIdx selected"
     rawData = getBlockRawData(blockIdx)
 
+    if redisClient is not None:
+        # read from cache
+        cachedBlock = redisClient.get('prediction-{}-block'.format(blockIdx))
+        cachedShape = redisClient.get('prediction-{}-shape'.format(blockIdx))
+        if cachedBlock and cachedShape:
+            try:
+                cachedShape = cachedShape.decode().split('_')
+                shape, dtype = list(map(int, cachedShape[:-1])), cachedShape[-1]
+                print("Found block {} of shape {} and dtype {} in cache!".format(blockIdx, shape, dtype))
+                return np.fromstring(cachedBlock, dtype=dtype).reshape(shape)
+            except:
+                print("ERROR when retrieving block from cache:")
+                traceback.print_exc(file=sys.stdout)
+
+
     print("Input block min {} max {} dtype {} shape {}".format(rawData.min(), rawData.max(), rawData.dtype, rawData.shape))
-    print("ArrayFlags: {}".format(rawData.flags))
-    # array.flags['C_CONTIGUOUS']
     features = pixelClassificationBackend.computeFeaturesOfBlock(blockIdx, rawData)
     print("Feature block min {} max {} dtype {} shape {}".format(features.min(), features.max(), features.dtype, features.shape))
-    print("ArrayFlags: {}".format(features.flags))
     predictions = pixelClassificationBackend.computePredictionsOfBlock(blockIdx, features)
     print("Prediction block min {} max {} dtype {} shape {}".format(predictions.min(), predictions.max(), predictions.dtype, predictions.shape))
-    print("ArrayFlags: {}".format(predictions.flags))
 
+    if redisClient is not None:
+        # save to cache
+        redisClient.set('prediction-{}-block'.format(blockIdx), predictions.tostring())
+        shapeStr = '_'.join([str(d) for d in predictions.shape] + [str(predictions.dtype)])
+        print(shapeStr)
+        redisClient.set('prediction-{}-shape'.format(blockIdx), shapeStr)
+    
     return predictions
 
 def getBlocksInRoi(start, stop):
@@ -252,8 +274,13 @@ if __name__ == '__main__':
                         help='path inside raw data HDF5 file to the raw data volume')
     parser.add_argument('--blocksize', type=int, default=64, 
                         help='size of blocks in all 2 or 3 dimensions, used to blockify all processing')
+    parser.add_argument('--use-caching', action='store_true', 
+                        help='use caching for features and predictions, assumes a redis server to be running!')
 
     options = parser.parse_args()
+
+    if options.use_caching:
+        redisClient = redis.StrictRedis()
 
     # read configuration from project file and raw data
     with h5py.File(options.project, 'r') as ilp:
