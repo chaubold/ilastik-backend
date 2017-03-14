@@ -4,7 +4,8 @@ project(ilastikbackend)
 # ------------------------------------------
 # user defined configuration
 set(WITH_TESTS "false" CACHE BOOL "Build tests.")
-set(WITH_PYTHON "false" CACHE BOOL "Build python wrapper.")
+set(WITH_PYTHON "true" CACHE BOOL "Build python wrapper.")
+set(WITH_COMMAND_LINE_TOOLS "false" CACHE BOOL "")
 
 # ------------------------------------------
 # global configuration
@@ -46,21 +47,19 @@ endif()
 # find dependencies
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_extensions/)
 find_package(Boost REQUIRED filesystem)
-find_package(TBB)
 find_package(VIGRA)
 find_package(HDF5 REQUIRED COMPONENTS HL)
 
 include_directories(
   ${Boost_INCLUDE_DIRS}
-  ${TBB_INCLUDE_DIRS}
   ${VIGRA_INCLUDE_DIR}
 )
 # ------------------------------------------
-# build library
+# build library (only really contains the code for loading random forests...
 file(GLOB_RECURSE SOURCES src/*.cpp)
 file(GLOB_RECURSE HEADERS include/*.h)
 add_library(ilastikbackend SHARED ${SOURCES} ${HEADERS})
-target_link_libraries(ilastikbackend ${Boost_LIBRARIES} ${TBB_LIBRARIES} ${VIGRA_IMPEX_LIBRARY} ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
+target_link_libraries(ilastikbackend ${Boost_LIBRARIES} ${VIGRA_IMPEX_LIBRARY} ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
 
 # installation
 install(TARGETS ilastikbackend 
@@ -84,4 +83,6 @@ if(WITH_PYTHON)
     add_subdirectory(python)
 endif()
 
-add_subdirectory(bin)
+if(WITH_COMMAND_LINE_TOOLS)
+    add_subdirectory(bin)
+endif()

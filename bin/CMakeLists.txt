@@ -2,8 +2,10 @@ cmake_minimum_required(VERSION 2.8)
 message( "\nConfiguring bin:" )
 
 find_package(Boost REQUIRED program_options)
+find_package(TBB)
 
 include_directories(
+    ${TBB_INCLUDE_DIRS}
 	${Boost_INCLUDE_DIRS}
 	${PROJECT_SOURCE_DIR}/include/
 )
