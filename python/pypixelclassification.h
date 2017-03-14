@@ -46,12 +46,24 @@ public:
 
     np_features_array compute_features_of_block(size_t blockIndex, const np_raw_array& raw_data)
     {
-        return vigra_to_numpy<DIM+1, OUT_TYPE>(pixelclassification_.compute_features_of_block(blockIndex, numpy_to_vigra<DIM, IN_TYPE>(raw_data)));
+        auto vigra_raw = numpy_to_vigra<DIM, IN_TYPE>(raw_data);
+        vigra::MultiArrayView<DIM+1, OUT_TYPE> result;
+        {
+            pybind11::gil_scoped_release release;
+            result = pixelclassification_.compute_features_of_block(blockIndex, vigra_raw);
+        }
+        return vigra_to_numpy<DIM+1, OUT_TYPE>(result);
     }
 
     np_predictions_array predict_for_block(size_t blockIndex, const np_features_array& feature_data)
     {
-        return vigra_to_numpy<DIM+1, OUT_TYPE>(pixelclassification_.predict_for_block(blockIndex, numpy_to_vigra<DIM+1, OUT_TYPE>(feature_data)));
+        auto vigra_features = numpy_to_vigra<DIM+1, OUT_TYPE>(feature_data);
+        vigra::MultiArrayView<DIM+1, OUT_TYPE> result;
+        {
+            pybind11::gil_scoped_release release;
+            result = pixelclassification_.predict_for_block(blockIndex, vigra_features);
+        }
+        return vigra_to_numpy<DIM+1, OUT_TYPE>(result);
     }
 
     PyBlock<DIM> get_required_raw_roi_for_feature_computation_of_block(size_t blockIndex)
