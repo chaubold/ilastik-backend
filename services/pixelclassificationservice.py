@@ -12,14 +12,15 @@ import h5py
 import vigra
 from pprint import pprint
 import redis
+import requests
 
 from flask import Flask, send_file, request
 from flask_autodoc import Autodoc
 
 # C++ module containing all the important methods
 import pyilastikbackend as pib
-# streaming numpy voxel data format
-from voxels_nddata_codec import VoxelsNddataCodec
+from utils.servicehelper import returnDataInFormat
+from utils.voxels_nddata_codec import VoxelsNddataCodec
 
 # flask setup
 app = Flask("pixelclassificationservice")
@@ -42,12 +43,15 @@ def getBlockRawData(blockIdx, withHalo=True):
         roi = pixelClassificationBackend.getRequiredRawRoiForFeatureComputationOfBlock(blockIdx)
     else:
         roi = pixelClassificationBackend.blocking.getBlock(blockIdx)
+    beginStr = '_'.join(map(str,roi.begin))
+    endStr = '_'.join(map(str, roi.end))
 
-    with h5py.File(options.raw_data_file, 'r') as f:
-        if dim == 2:
-            rawData = f[options.raw_data_path][roi.begin[0]:roi.end[0], roi.begin[1]:roi.end[1]]
-        elif dim == 3:
-            rawData = f[options.raw_data_path][roi.begin[0]:roi.end[0], roi.begin[1]:roi.end[1], roi.begin[2]:roi.end[2]]
+    r = requests.get('http://{ip}/raw/raw/roi?extents_min={b}&extents_max={e}'.format(ip=options.dataprovider_ip, b=beginStr, e=endStr), stream=True)
+    if r.status_code != 200:
+        raise RuntimeError("Could not get raw data of block {b} from {ip}".format(b=blockIdx, ip=options.dataprovider_ip))
+    shape = roi.shape
+    codec = VoxelsNddataCodec(dtype)
+    rawData = codec.decode_to_ndarray(r.raw, shape)
 
     return rawData
 
@@ -165,26 +169,6 @@ def combineBlocksToVolume(blockIds, blockContents, roi=None):
 
     return volume
 
-def returnDataInFormat(data, format):
-    '''
-    Handle sending the requested data back in the specified format
-    '''
-    assert format in ['raw', 'tiff', 'png', 'hdf5'], "Invalid Format selected"
-    if format == 'raw':
-        stream = VoxelsNddataCodec(data.dtype).create_encoded_stream_from_ndarray(data)
-        return send_file(stream, mimetype=VoxelsNddataCodec.VOLUME_MIMETYPE)
-    elif format in ('tiff', 'png'):
-        _, fname = tempfile.mkstemp(suffix='.'+format)
-        vigra.impex.writeImage(data.squeeze(), fname, dtype='NBYTE')
-        # TODO: delete file?
-        return send_file(fname)
-    elif format == 'hdf5':
-        _, fname = tempfile.mkstemp(suffix='.'+format)
-        with h5py.File(fname, 'w') as f:
-            f.create_dataset('exported_data', data=data)
-        # TODO: delete file?
-        return send_file(fname)
-
 def createRoi(start, stop):
     ''' helper to create a 2D or 3D block '''
     if dim == 2:
@@ -268,10 +252,8 @@ if __name__ == '__main__':
     #                     help='Which format the input data has, one of [uint8, uint16, float].')
     parser.add_argument('--project', type=str, required=True, 
                         help='ilastik project with trained random forest')
-    parser.add_argument('--raw-data-file', type=str, required=True, 
-                        help='hdf5 file containing the raw data to process')
-    parser.add_argument('--raw-data-path', type=str, required=True, 
-                        help='path inside raw data HDF5 file to the raw data volume')
+    parser.add_argument('--dataprovider-ip', type=str, required=True, 
+                        help='ip and port of dataprovider')
     parser.add_argument('--blocksize', type=int, default=64, 
                         help='size of blocks in all 2 or 3 dimensions, used to blockify all processing')
     parser.add_argument('--use-caching', action='store_true', 
@@ -282,14 +264,25 @@ if __name__ == '__main__':
     if options.use_caching:
         redisClient = redis.StrictRedis()
 
-    # read configuration from project file and raw data
-    with h5py.File(options.project, 'r') as ilp:
-        with h5py.File(options.raw_data_file, 'r') as raw:
-            dtype = str(raw[options.raw_data_path].dtype)
-            shape = raw[options.raw_data_path].shape
-            dim = len(shape)
-            blockShape = [64] * dim
+    # read dataset config from data provider service
+    r = requests.get('http://{ip}/info/dtype'.format(ip=options.dataprovider_ip))
+    if r.status_code != 200:
+        raise RuntimeError("Could not query datatype from dataprovider at ip: {}".format(options.dataprovider_ip))
+    dtype = r.text
+    
+    r = requests.get('http://{ip}/info/dim'.format(ip=options.dataprovider_ip))
+    if r.status_code != 200:
+        raise RuntimeError("Could not query dimensionaliy from dataprovider at ip: {}".format(options.dataprovider_ip))
+    dim = int(r.text)
+    blockShape = [options.blocksize] * dim
 
+    r = requests.get('http://{ip}/info/shape'.format(ip=options.dataprovider_ip))
+    if r.status_code != 200:
+        raise RuntimeError("Could not query shape from dataprovider at ip: {}".format(options.dataprovider_ip))
+    shape = list(map(int, r.text.split('_')))
+
+    # read configuration from project file
+    with h5py.File(options.project, 'r') as ilp:
         # extract selected features from ilastik project file
         scales = ilp['FeatureSelections/Scales']
         featureNames = ilp['FeatureSelections/FeatureIds']
@@ -316,19 +309,23 @@ if __name__ == '__main__':
     if dim == 2:
         if dtype == 'uint8':
             pixelClassificationBackend = pib.PixelClassification_2d_uint8()
-        if dtype == 'uint16':
+        elif dtype == 'uint16':
             pixelClassificationBackend = pib.PixelClassification_2d_uint16()
-        if dtype == 'float32':
+        elif dtype == 'float32':
             pixelClassificationBackend = pib.PixelClassification_2d_float32()
+        else:
+            raise ValueError("Dataset has unsupported datatype {}".format(dtype))
 
         blocking = pib.Blocking_2d([0,0], shape, blockShape)
     elif dim == 3:
         if dtype == 'uint8':
             pixelClassificationBackend = pib.PixelClassification_3d_uint8()
-        if dtype == 'uint16':
+        elif dtype == 'uint16':
             pixelClassificationBackend = pib.PixelClassification_3d_uint16()
-        if dtype == 'float32':
+        elif dtype == 'float32':
             pixelClassificationBackend = pib.PixelClassification_3d_float32()
+        else:
+            raise ValueError("Dataset has unsupported datatype {}".format(dtype))
 
         blocking = pib.Blocking_3d([0,0,0], shape, blockShape)
     else:

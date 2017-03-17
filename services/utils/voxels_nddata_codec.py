@@ -8,6 +8,7 @@ class VoxelsNddataCodec(object):
     Stuart Berg: This class was copied from the pydvid source code, but edited to use C-order instead of Fortran-order.
 
     Carsten Haubold, March 2017: adjusted to Python 3: numpy.getbuffer(array) was removed, using array.tobytes() now.
+    And switched back to Fortran order because that's what Vigra uses
     """
 
     # Data is sent to/retrieved from the http response stream in chunks.
@@ -20,7 +21,7 @@ class VoxelsNddataCodec(object):
         """
         dtype: The pixel type as a numpy dtype.
         """
-        self.dtype = dtype
+        self.dtype = numpy.dtype(dtype)
         
     def decode_to_ndarray(self, stream, full_roi_shape):
         """
@@ -31,10 +32,16 @@ class VoxelsNddataCodec(object):
                         (For example, it's not valid to request channel 2 of an RGB image.  
                         You must request all channels 0-3.)
         """
-        array = numpy.ndarray( full_roi_shape, dtype=self.dtype, order='C' )
-        # buf = numpy.getbuffer(array)
-        buf = array.tobytes()
+        # array = numpy.ndarray( full_roi_shape, dtype=self.dtype, order='F' )
+        # buf = array.tobytes()
+        # self._read_to_buffer(buf, stream)
+
+        # use array = np.frombuffer(buf, dtype=self.dtype) and then reshape, 
+        # because stackoverflow suggests that is faster than using memoryviews
+        buf_len = self.calculate_buffer_len(full_roi_shape)
+        buf = bytearray(buf_len)
         self._read_to_buffer(buf, stream)
+        array = numpy.frombuffer(buf, dtype=self.dtype).reshape(full_roi_shape)
         return array
 
     def encode_from_ndarray(self, stream, array):
@@ -77,9 +84,9 @@ class VoxelsNddataCodec(object):
         assert array.dtype == self.dtype, \
             "Wrong dtype.  Expected {}, got {}".format( self.dtype, array.dtype )
 
-        # Unfortunately, if the array isn't C_CONTIGUOUS, we have to copy it.
-        if not array.flags['C_CONTIGUOUS']:
-            array_copy = numpy.empty_like(array, order='C')
+        # Unfortunately, if the array isn't F_CONTIGUOUS, we have to copy it.
+        if not array.flags['F_CONTIGUOUS']:
+            array_copy = numpy.empty_like(array, order='F')
             array_copy[:] = array[:]
             array = array_copy
 

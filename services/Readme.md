@@ -24,7 +24,7 @@ cmake .. # and configure everything properly, including WITH_PYTHON=TRUE, you ne
 make install
 ```
 
-You also need to run a redis server on the default port which is used to communicate the results.
+You also need to run a redis server on the default port if you want to use caching.
 Install docker and run the latest redis in a linux container as follows: 
     
 ```sh
@@ -37,13 +37,21 @@ Where the parameters mean:
 * `--name` = provide a name for the container that can be used with start/stop,...
 
 
+## Running a data provider server server
+
+To run a data provider service, serving data by default at port `9000`, execute the line below.
+You can access `localhost:9000/doc` in your browser to see an API documentation.
+
+```sh
+python dataproviderservice.py --raw-data-file test/raw.h5 --raw-data-path exported_data
+```
+
 ## Running a pixel classification prediction server
 
 To start the pixel classification prediction server for a little test project and dataset, which listens on the default port `8888`, run:
 
 ```sh
-cd pixelclassificationservice
-python service.py --project ../test/pc.ilp --raw-data-file ../test/raw.h5 --raw-data-path exported_data --use-caching
+python pixelclassificationservice.py --project test/pc.ilp --use-caching --dataprovider-ip 0.0.0.0:9000
 ```
 
 To see the API the client offers, navigate your webbrowser to `localhost:8888/doc`, for instance retrieve the predictions for a roi by
