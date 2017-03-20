@@ -6,9 +6,10 @@ import signal
 import numpy as np
 
 from PyQt4.QtCore import QObject, pyqtSignal, QString
+from PyQt4.QtGui import QColor
 
 from volumina.pixelpipeline.asyncabcs import RequestABC, SourceABC
-from volumina.layer import GrayscaleLayer
+from volumina.layer import GrayscaleLayer, AlphaModulatedLayer
 from volumina.viewer import Viewer
 
 from voxels_nddata_codec import VoxelsNddataCodec
@@ -21,7 +22,7 @@ class VoxelClientRequest(object):
         channels are the number of channels the dataset has, 0 if it doesn't have a channel axis (same amount of data as for =1)
         '''
         assert np.all(np.array(start) < np.array(stop)), "End values cannot be smaller or equal than start values!"
-        print("Requesting roi from {} to {}".format(start, stop))
+        print("Requesting {} roi from {} to {}".format(layer, start, stop))
         self.hostname = hostname
         self.layer = layer
         self.dtype = dtype
@@ -50,19 +51,20 @@ class VoxelClientRequest(object):
         
         # request block, which will either have exactly the specified (2D or 3D) shape,
         # or have one additional (channel) axis
-        shape = np.array(self.stop) - self.start
+        shape = list(np.array(self.stop) - self.start) + [self.channels]
         print("Expecting shape {} of dtype {}".format(shape, self.dtype))
         codec = VoxelsNddataCodec(self.dtype)
         arr = codec.decode_to_ndarray(r.raw, shape)
+        print("Got array of shape {}".format(shape))
 
         # slice channels if any
         if len(arr.shape) > self.dim:
             assert 0 <= self.channelRange[0] < self.channels
-            assert 0 <= self.channelRange[1] < self.channels
+            assert 0 <= self.channelRange[1] <= self.channels
             arr = arr[...,self.channelRange[0]:self.channelRange[1]]
         else:
             assert self.channelRange == (0,1), "Cannot select channels from a plain image without channel dimension"
-            arr = np.expand_dims(arr, axis=-1) # add channel dimension
+            # arr = np.expand_dims(arr, axis=-1) # add channel dimension
 
         # add z axis again
         if self.dim == 2:
@@ -70,7 +72,7 @@ class VoxelClientRequest(object):
         # add t axis
         arr = np.expand_dims(arr, axis=0)
 
-        print("Returning block of shape {}".format(arr.shape))
+        print("Returning {} block of shape {} with min {} and max {}".format(self.layer, arr.shape, arr.min(), arr.max()))
         return arr
 
 class VoxelClientSource(QObject):
@@ -78,11 +80,12 @@ class VoxelClientSource(QObject):
     isDirty = pyqtSignal( object )
     numberOfChannelsChanged = pyqtSignal(int)
 
-    def __init__(self, data_hostname, pixelclass_hostname, layer="raw"):
+    def __init__(self, data_hostname, pixelclass_hostname, layer="raw", selectedChannel=0):
         super(VoxelClientSource, self).__init__()
         self.data_hostname = data_hostname
         self.hostname = pixelclass_hostname
         self.layer = layer
+        self.selectedChannel = selectedChannel
         
         # read dataset config from data provider service
         r = requests.get('http://{ip}/info/dtype'.format(ip=data_hostname))
@@ -101,11 +104,12 @@ class VoxelClientSource(QObject):
         self.shape = list(map(int, r.text.split('_')))
 
         if self.layer == 'raw':
-            self.numChannels = 1 # TODO: adjust for multi channel input!
+            self.numChannels = 1
         else:
             r = requests.get('http://{ip}/prediction/numclasses'.format(ip=self.hostname))
             r.raise_for_status()
             self.numChannels = int(r.text)
+            self._dtype = 'float32'
 
         # pad shape to 5 dims
         self.shape = [1] + self.shape # add time dimension at the front
@@ -113,11 +117,11 @@ class VoxelClientSource(QObject):
         if self.dim == 2:
             self.shape += [1] # add z dimension if needed
 
-        self.shape += [self.numChannels] # raw has one channel for now
+        self.shape += [1] # raw has one channel for now
         print("Voxel source for layer {} has shape {}".format(self.layer, self.shape))
 
     def numberOfChannels(self):
-        return self.numChannels
+        return 1
 
     def dtype(self):
         return np.dtype(self._dtype).type
@@ -127,6 +131,8 @@ class VoxelClientSource(QObject):
         start, stop = zip(*[(s.start, s.stop) for s in slicing])
         start = [0 if x is None else x for x in start]
         stop = [b if a is None else a for a,b in zip(stop, self.shape)]
+        start[-1] += self.selectedChannel
+        stop[-1] += self.selectedChannel
 
         return VoxelClientRequest( self.hostname, self.layer, self._dtype, start, stop, self.dim, self.numChannels )
 
@@ -162,6 +168,7 @@ if __name__ == "__main__":
     viewer = Viewer()
     
     # Raw
+    print("Adding raw layer")
     raw_source = VoxelClientSource(args.dataprovider_ip, args.pixelclass_ip, layer='raw')
     raw_layer = GrayscaleLayer(raw_source)
     raw_layer.numberOfChannels = raw_source.numberOfChannels()
@@ -170,14 +177,27 @@ if __name__ == "__main__":
     viewer.dataShape = raw_source.shape
     viewer.layerstack.append(raw_layer)
 
-    # Predictions
-    # raw_source = VoxelClientSource(args.dataprovider_ip, args.pixelclass_ip, layer='prediction')
-    # raw_layer = GrayscaleLayer(raw_source)
-    # raw_layer.numberOfChannels = raw_source.numberOfChannels()
-    # raw_layer.name = QString("Prediction")
+    # loop over prediction channels and add layers
+    r = requests.get('http://{ip}/prediction/numclasses'.format(ip=args.pixelclass_ip))
+    r.raise_for_status()
+    numChannels = int(r.text)
 
-    # viewer.dataShape = raw_source.shape
-    # viewer.layerstack.append(raw_layer)
+    colors = [QColor.fromRgb(255,0,0), QColor.fromRgb(0,255,0), QColor.fromRgb(0,0,255), QColor.fromRgb(255,0,255), QColor.fromRgb(0,255,255)]
+
+    for c in range(numChannels):
+        # Predictions
+        print("Adding prediction layer {}".format(c))
+        pred_source = VoxelClientSource(args.dataprovider_ip, args.pixelclass_ip, layer='prediction', selectedChannel=c)
+        pred_layer = AlphaModulatedLayer( pred_source,
+                                          tintColor=colors[c],
+                                          range=(0.0, 1.0),
+                                          normalize=(0.0, 1.0) )
+        pred_layer.opacity = 0.25
+        # pred_layer = GrayscaleLayer(pred_source)
+        pred_layer.numberOfChannels = 1 #pred_source.numberOfChannels()
+        pred_layer.name = QString("Prediction, channel {}".format(c))
+
+        viewer.layerstack.append(pred_layer)
 
         
     # r = requests.get("http://{hostname}/api/list-datasets".format(hostname=hostname))
