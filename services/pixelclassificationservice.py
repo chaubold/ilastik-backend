@@ -110,12 +110,12 @@ def getBlocksInRoi(start, stop):
     blockIds = []
     coord = np.zeros_like(start)
     for x in range(int(blocksPerDim[0])):
-        coord[0] = start[0] + blk.blockShape[0] * x
+        coord[0] = startBlock.begin[0] + blk.blockShape[0] * x
         for y in range(int(blocksPerDim[1])):
-            coord[1] = start[1] + blk.blockShape[1] * y
+            coord[1] = startBlock.begin[1] + blk.blockShape[1] * y
             if dim == 3:
                 for z in range(int(blocksPerDim[2])):
-                    coord[2] = start[2] + blk.blockShape[2] * z
+                    coord[2] = startBlock.begin[2] + blk.blockShape[2] * z
                     blockIds.append(blk.getSurroundingBlockIndex(coord))
             else:
                 blockIds.append(blk.getSurroundingBlockIndex(coord))
@@ -163,9 +163,9 @@ def combineBlocksToVolume(blockIds, blockContents, roi=None):
     if roi is not None:
         print("Cropping volume of shape {} to roi from {} to {}".format(volume.shape, roi.begin, roi.end))
         if dim == 2:
-            volume = volume[roi.begin[0]-start[0]:roi.end[0]-stop[0], roi.begin[1]-start[1]:roi.end[1]-stop[1], ...]
+            volume = volume[roi.begin[0]-start[0]:roi.end[0]-start[0], roi.begin[1]-start[1]:roi.end[1]-start[1], ...]
         elif dim == 3:
-            volume = volume[roi.begin[0]-start[0]:roi.end[0]-stop[0], roi.begin[1]-start[1]:roi.end[1]-stop[1], roi.begin[2]-start[2]:roi.end[2]-stop[2], ...]
+            volume = volume[roi.begin[0]-start[0]:roi.end[0]-start[0], roi.begin[1]-start[1]:roi.end[1]-start[1], roi.begin[2]-start[2]:roi.end[2]-start[2], ...]
 
     return volume
 
