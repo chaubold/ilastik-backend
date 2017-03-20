@@ -59,3 +59,15 @@ To see the API the client offers, navigate your webbrowser to `localhost:8888/do
 ```sh
 http://localhost:8888/prediction/png/roi?extents_min=10_10&extents_max=100_150
 ```
+
+## Connecting a Viewer
+
+The `volumina_viewer.py` is taken from [ilastik's voxel-server prototype](https://github.com/ilastik/ilastik/commit/609857c477df050af9d47e5b1a0590051e242280)
+and provides a data source for the viewer that retrieves the data from the pixel classification service.
+
+The volumina viewer must be run from a ilastik development environment as explained in [ilastik-build-conda](https://github.com/ilastik/ilastik-build-conda).
+So while data provider and pixel classification run on Python 3, this is must be run using Python 2!
+
+```sh
+python volumina_viewer.py --pixelclass-ip 0.0.0.0:8888 --dataprovider-ip 0.0.0.0:9000
+```
