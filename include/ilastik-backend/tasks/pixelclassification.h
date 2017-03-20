@@ -97,6 +97,18 @@ public:
         return out_array.subarray(coreBegin, coreBegin + coreShape);
     }
 
+    const size_t get_num_features() const
+    {
+        return feature_calculator_->get_feature_size();
+    }
+
+    const size_t get_num_classes() const
+    {
+        if(random_forest_vector_.empty())
+            throw std::runtime_error("No random forest loaded, don't know number of classes yet");
+        return random_forest_vector_[0].class_count();
+    }
+
     predictions_array_type predict_for_block(size_t blockIndex, const features_array_type& feature_data)
     {
         // preconditions

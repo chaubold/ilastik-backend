@@ -80,6 +80,12 @@ public:
     coordinate_array get_halo_size()
     { return tiny_vector_to_numpy<DIM, coordinate_type>(pixelclassification_.get_halo_size()); }
 
+    const size_t get_num_features() const
+    { return pixelclassification_.get_num_features(); }
+
+    const size_t get_num_classes() const
+    { return pixelclassification_.get_num_classes(); }
+
 private:
     ilastikbackend::tasks::pixel_classification_task<DIM, IN_TYPE, OUT_TYPE> pixelclassification_;
 };
@@ -102,6 +108,8 @@ void export_pixel_classificationT(pybind11::module& m, const std::string& input_
         .def("computePredictionsOfBlock",&PyPixelClassification<DIM, IN_TYPE, OUT_TYPE>::predict_for_block)
         .def("getRequiredRawRoiForFeatureComputationOfBlock", &PyPixelClassification<DIM, IN_TYPE, OUT_TYPE>::get_required_raw_roi_for_feature_computation_of_block)
         .def_property_readonly("blocking",&PyPixelClassification<DIM, IN_TYPE, OUT_TYPE>::get_blocking)
+        .def_property_readonly("numberOfFeatures",&PyPixelClassification<DIM, IN_TYPE, OUT_TYPE>::get_num_features)
+        .def_property_readonly("numberOfClasses",&PyPixelClassification<DIM, IN_TYPE, OUT_TYPE>::get_num_classes)
         .def_property_readonly("cacheValid",&PyPixelClassification<DIM, IN_TYPE, OUT_TYPE>::is_cache_valid)
         .def_property_readonly("haloSize",&PyPixelClassification<DIM, IN_TYPE, OUT_TYPE>::get_halo_size)
     ;
