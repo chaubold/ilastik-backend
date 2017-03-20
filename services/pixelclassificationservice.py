@@ -238,9 +238,9 @@ def get_prediction_roi(format):
 # --------------------------------------------------------------
 @app.route('/prediction/numclasses')
 @doc.doc()
-def get_prediction_num_classes(format):
+def get_prediction_num_classes():
     ''' Return the number of classes predicted by the currently loaded random forest '''
-    return pixelClassificationBackend.numberOfClasses
+    return str(pixelClassificationBackend.numberOfClasses)
 
 # --------------------------------------------------------------
 @app.route('/doc')
