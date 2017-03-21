@@ -94,7 +94,7 @@ public:
         coreBegin[DIM] = 0;
         coreShape[DIM] = feature_calculator_->get_feature_size();
 
-        return out_array.subarray(coreBegin, coreBegin + coreShape);
+        return features_array_type(vigra::MultiArray<DIM+1, OUT_TYPE>(out_array.subarray(coreBegin, coreBegin + coreShape)));
     }
 
     const size_t get_num_features() const
