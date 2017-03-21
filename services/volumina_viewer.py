@@ -23,6 +23,7 @@ class VoxelClientRequest(object):
         '''
         assert np.all(np.array(start) < np.array(stop)), "End values cannot be smaller or equal than start values!"
         print("Requesting {} roi from {} to {}".format(layer, start, stop))
+        self.startTime = time.time()
         self.hostname = hostname
         self.layer = layer
         self.dtype = dtype
@@ -71,8 +72,9 @@ class VoxelClientRequest(object):
             arr = np.expand_dims(arr, axis=2)
         # add t axis
         arr = np.expand_dims(arr, axis=0)
-
-        print("Returning {} block of shape {} with min {} and max {}".format(self.layer, arr.shape, arr.min(), arr.max()))
+        endTime = time.time()
+        print("Returning {} block of shape {} with min {} and max {} after {} secs".format(
+            self.layer, arr.shape, arr.min(), arr.max(), endTime - self.startTime))
         return arr
 
 class VoxelClientSource(QObject):
