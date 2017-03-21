@@ -55,13 +55,8 @@ def getBlockRawData(blockIdx, withHalo=True):
 
     return rawData
 
-def processBlock(blockIdx):
-    '''
-    Main computational method for processing blocks
-    '''
-    assert 0 <= blockIdx < pixelClassificationBackend.blocking.numberOfBlocks, "Invalid blockIdx selected"
-    rawData = getBlockRawData(blockIdx)
-
+def readBlockFromCache(blockIdx):
+    ''' if a redis client was initialized, try to find the block and its shape info and return the contents as numpy array '''
     if redisClient is not None:
         # read from cache
         cachedBlock = redisClient.get('prediction-{}-block'.format(blockIdx))
@@ -75,20 +70,41 @@ def processBlock(blockIdx):
             except:
                 print("ERROR when retrieving block from cache:")
                 traceback.print_exc(file=sys.stdout)
+    return None
 
+def saveBlockToChache(blockIdx, blockData):
+    ''' if a redis client was initialized, store the block there '''
+    if redisClient is not None:
+        # save to cache
+        redisClient.set('prediction-{}-block'.format(blockIdx), blockData.tostring())
+        shapeStr = '_'.join([str(d) for d in blockData.shape] + [str(blockData.dtype)])
+        print(shapeStr)
+        redisClient.set('prediction-{}-shape'.format(blockIdx), shapeStr)
 
+def clearCache():
+    ''' Remove all prediction blocks and their shapes from the cache '''
+    if redisClient is not None:
+        for k in redisClient.scan_iter(match='prediction-*'):
+            redisClient.delete(k)
+
+def processBlock(blockIdx):
+    '''
+    Main computational method for processing blocks
+    '''
+    assert 0 <= blockIdx < pixelClassificationBackend.blocking.numberOfBlocks, "Invalid blockIdx selected"
+    rawData = getBlockRawData(blockIdx)
+
+    cachedBlock = readBlockFromCache(blockIdx)
+    if cachedBlock is not None:
+        return cachedBlock
+    
     print("Input block min {} max {} dtype {} shape {}".format(rawData.min(), rawData.max(), rawData.dtype, rawData.shape))
     features = pixelClassificationBackend.computeFeaturesOfBlock(blockIdx, rawData)
     print("Feature block min {} max {} dtype {} shape {}".format(features.min(), features.max(), features.dtype, features.shape))
     predictions = pixelClassificationBackend.computePredictionsOfBlock(blockIdx, features)
     print("Prediction block min {} max {} dtype {} shape {}".format(predictions.min(), predictions.max(), predictions.dtype, predictions.shape))
 
-    if redisClient is not None:
-        # save to cache
-        redisClient.set('prediction-{}-block'.format(blockIdx), predictions.tostring())
-        shapeStr = '_'.join([str(d) for d in predictions.shape] + [str(predictions.dtype)])
-        print(shapeStr)
-        redisClient.set('prediction-{}-shape'.format(blockIdx), shapeStr)
+    saveBlockToChache(blockIdx, predictions)
     
     return predictions
 
@@ -270,6 +286,8 @@ if __name__ == '__main__':
 
     if options.use_caching:
         redisClient = redis.StrictRedis()
+        # get rid of previously stored blocks
+        # clearCache()
 
     # read dataset config from data provider service
     r = requests.get('http://{ip}/info/dtype'.format(ip=options.dataprovider_ip))
