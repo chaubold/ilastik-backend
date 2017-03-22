@@ -94,4 +94,5 @@ if __name__ == '__main__':
         shape = raw[options.raw_data_path].shape
         dim = len(shape)
 
-    app.run(host='0.0.0.0', port=options.port, debug=False)
+    app.run(host='0.0.0.0', port=options.port, debug=False, threaded=True)
+

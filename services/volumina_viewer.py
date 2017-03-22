@@ -82,33 +82,32 @@ class VoxelClientSource(QObject):
     isDirty = pyqtSignal( object )
     numberOfChannelsChanged = pyqtSignal(int)
 
-    def __init__(self, data_hostname, pixelclass_hostname, layer="raw", selectedChannel=0):
+    def __init__(self, hostname, layer="raw", selectedChannel=0):
         super(VoxelClientSource, self).__init__()
-        self.data_hostname = data_hostname
-        self.hostname = pixelclass_hostname
+        self.hostname = hostname
         self.layer = layer
         self.selectedChannel = selectedChannel
         
         # read dataset config from data provider service
-        r = requests.get('http://{ip}/info/dtype'.format(ip=data_hostname))
+        r = requests.get('http://{ip}/raw/info/dtype'.format(ip=hostname))
         if r.status_code != 200:
-            raise RuntimeError("Could not query datatype from dataprovider at ip: {}".format(data_hostname))
+            raise RuntimeError("Could not query datatype from dataprovider at ip: {}".format(hostname))
         self._dtype = str(r.text)
         
-        r = requests.get('http://{ip}/info/dim'.format(ip=data_hostname))
+        r = requests.get('http://{ip}/raw/info/dim'.format(ip=hostname))
         if r.status_code != 200:
-            raise RuntimeError("Could not query dimensionaliy from dataprovider at ip: {}".format(data_hostname))
+            raise RuntimeError("Could not query dimensionaliy from dataprovider at ip: {}".format(hostname))
         self.dim = int(r.text)
 
-        r = requests.get('http://{ip}/info/shape'.format(ip=data_hostname))
+        r = requests.get('http://{ip}/raw/info/shape'.format(ip=hostname))
         if r.status_code != 200:
-            raise RuntimeError("Could not query shape from dataprovider at ip: {}".format(data_hostname))
+            raise RuntimeError("Could not query shape from dataprovider at ip: {}".format(hostname))
         self.shape = list(map(int, r.text.split('_')))
 
         if self.layer == 'raw':
             self.numChannels = 1
         else:
-            r = requests.get('http://{ip}/prediction/numclasses'.format(ip=self.hostname))
+            r = requests.get('http://{ip}/prediction/info/numclasses'.format(ip=self.hostname))
             r.raise_for_status()
             self.numChannels = int(r.text)
             self._dtype = 'float32'
@@ -142,7 +141,7 @@ class VoxelClientSource(QObject):
         self.isDirty.emit(slicing)
 
     def __eq__( self, other ):
-        return  self.hostname == other.hostname and self.data_hostname == other.data_hostname
+        return self.hostname == other.hostname
 
     def __ne__( self, other ):
         return not (self == other)
@@ -161,8 +160,7 @@ if __name__ == "__main__":
     
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pixelclass-ip", type=str, help="ip:port of pixel classification service")
-    parser.add_argument("--dataprovider-ip", type=str, help="ip:port of dataprovider service")
+    parser.add_argument("--ilastik-ip", type=str, help="ip:port of ilastik gateway")
     args = parser.parse_args()
 
     app = QApplication([])
@@ -171,7 +169,7 @@ if __name__ == "__main__":
     
     # Raw
     print("Adding raw layer")
-    raw_source = VoxelClientSource(args.dataprovider_ip, args.pixelclass_ip, layer='raw')
+    raw_source = VoxelClientSource(args.ilastik_ip, layer='raw')
     raw_layer = GrayscaleLayer(raw_source)
     raw_layer.numberOfChannels = raw_source.numberOfChannels()
     raw_layer.name = QString("Raw")
@@ -180,7 +178,7 @@ if __name__ == "__main__":
     viewer.layerstack.append(raw_layer)
 
     # loop over prediction channels and add layers
-    r = requests.get('http://{ip}/prediction/numclasses'.format(ip=args.pixelclass_ip))
+    r = requests.get('http://{ip}/prediction/info/numclasses'.format(ip=args.ilastik_ip))
     r.raise_for_status()
     numChannels = int(r.text)
 
@@ -189,7 +187,7 @@ if __name__ == "__main__":
     for c in range(numChannels):
         # Predictions
         print("Adding prediction layer {}".format(c))
-        pred_source = VoxelClientSource(args.dataprovider_ip, args.pixelclass_ip, layer='prediction', selectedChannel=c)
+        pred_source = VoxelClientSource(args.ilastik_ip, layer='prediction', selectedChannel=c)
         pred_layer = AlphaModulatedLayer( pred_source,
                                           tintColor=colors[c],
                                           range=(0.0, 1.0),

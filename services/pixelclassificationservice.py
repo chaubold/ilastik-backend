@@ -33,16 +33,13 @@ redisClient = None
 # --------------------------------------------------------------
 # Helper methods
 # --------------------------------------------------------------
-def getBlockRawData(blockIdx, withHalo=True):
+def getBlockRawData(blockIdx):
     '''
     Get the raw data of a block
     '''
     assert 0 <= blockIdx < pixelClassificationBackend.blocking.numberOfBlocks, "Invalid blockIdx selected"
 
-    if withHalo:
-        roi = pixelClassificationBackend.getRequiredRawRoiForFeatureComputationOfBlock(blockIdx)
-    else:
-        roi = pixelClassificationBackend.blocking.getBlock(blockIdx)
+    roi = pixelClassificationBackend.getRequiredRawRoiForFeatureComputationOfBlock(blockIdx)
     beginStr = '_'.join(map(str,roi.begin))
     endStr = '_'.join(map(str, roi.end))
 
@@ -108,100 +105,12 @@ def processBlock(blockIdx):
     
     return predictions
 
-def getBlocksInRoi(start, stop):
-    '''
-    Compute the list of blocks that need to be processed to serve the requested ROI
-    '''
-    blk = pixelClassificationBackend.blocking
-    
-    startIdx = blk.getSurroundingBlockIndex(start)
-    startBlock = blk.getBlock(startIdx)
-
-    stopIdx = blk.getSurroundingBlockIndex(stop)
-    stopBlock = blk.getBlock(stopIdx)
-
-    shape = stopBlock.end - startBlock.begin
-    blocksPerDim = np.ceil(shape / blk.blockShape)
-
-    blockIds = []
-    coord = np.zeros_like(start)
-    for x in range(int(blocksPerDim[0])):
-        coord[0] = startBlock.begin[0] + blk.blockShape[0] * x
-        for y in range(int(blocksPerDim[1])):
-            coord[1] = startBlock.begin[1] + blk.blockShape[1] * y
-            if dim == 3:
-                for z in range(int(blocksPerDim[2])):
-                    coord[2] = startBlock.begin[2] + blk.blockShape[2] * z
-                    blockIds.append(blk.getSurroundingBlockIndex(coord))
-            else:
-                blockIds.append(blk.getSurroundingBlockIndex(coord))
-
-    print("Range {}-{} is covered by blocks: {}".format(start, stop, blockIds))
-
-    return blockIds
-
-def combineBlocksToVolume(blockIds, blockContents, roi=None):
-    '''
-    Stitch blocks into one numpy volume, which will have the size of the 
-    smallest bounding box containing all specified blocks or the size of the provided roi (which should have .begin, .end, and .shape)
-    '''
-    assert len(blockIds) == len(blockContents), "Must provide the same number of block indices and contents"
-    assert len(blockContents) > 0, "Cannot combine zero blocks"
-    blocks = [pixelClassificationBackend.blocking.getBlock(b) for b in blockIds]
-    start = np.min([b.begin for b in blocks],axis=0)
-    stop = np.max([b.end for b in blocks],axis=0)
-    print("Got blocks covering {} to {}".format(start, stop))
-    shape = stop - start
-
-    if roi is not None:
-        assert all(start <= roi.begin), "Provided blocks do not start at roi beginning"
-        assert all(roi.end <= stop), "Provided blocks end at {} before roi end {}".format(stop, roi.end)
-
-    additionalAxes = blockContents[0].shape[dim:]
-    print("additional axes: {}".format(additionalAxes))
-    if len(additionalAxes) > 0:
-        volume = np.zeros(tuple(shape) + additionalAxes, dtype=blockContents[0].dtype)
-    else:
-        volume = np.zeros(shape, dtype=blockContents[0].dtype)
-
-    print("Have volume of shape {}".format(volume.shape))
-
-    for block, data in zip(blocks, blockContents):
-        blockStart = block.begin - start
-        blockEnd = block.end - start
-
-        if dim == 2:
-            print("Inserting data into a subarray of shape {} from a {} block".format(volume[blockStart[0]:blockEnd[0], blockStart[1]:blockEnd[1], ...].shape, data.shape))
-            volume[blockStart[0]:blockEnd[0], blockStart[1]:blockEnd[1], ...] = data
-        elif dim == 3:
-            volume[blockStart[0]:blockEnd[0], blockStart[1]:blockEnd[1], blockStart[2]:blockEnd[2], ...] = data
-
-    if roi is not None:
-        print("Cropping volume of shape {} to roi from {} to {}".format(volume.shape, roi.begin, roi.end))
-        if dim == 2:
-            volume = volume[roi.begin[0]-start[0]:roi.end[0]-start[0], roi.begin[1]-start[1]:roi.end[1]-start[1], ...]
-        elif dim == 3:
-            volume = volume[roi.begin[0]-start[0]:roi.end[0]-start[0], roi.begin[1]-start[1]:roi.end[1]-start[1], roi.begin[2]-start[2]:roi.end[2]-start[2], ...]
-
-    return volume
-
 def createRoi(start, stop):
     ''' helper to create a 2D or 3D block '''
     if dim == 2:
         return pib.Block_2d(np.array(start), np.array(stop))
     elif dim == 3:
         return pib.Block_3d(np.array(start), np.array(stop))
-
-# --------------------------------------------------------------
-@app.route('/raw/<format>/<int:blockIdx>')
-@doc.doc()
-def get_raw(format, blockIdx):
-    '''
-    Get the raw data of a block in the specified format (raw / tiff / png /hdf5 ).
-    '''
-
-    data = getBlockRawData(blockIdx)
-    return returnDataInFormat(data, format)
 
 # --------------------------------------------------------------
 @app.route('/prediction/<format>/<int:blockIdx>')
@@ -211,44 +120,6 @@ def get_prediction(format, blockIdx):
     Get a predicted block in the specified format (raw / tiff / png / hdf5).
     '''
     data = processBlock(blockIdx)
-    return returnDataInFormat(data, format)
-
-# --------------------------------------------------------------
-@app.route('/raw/<format>/roi')
-@doc.doc()
-def get_raw_roi(format):
-    '''
-    Get the raw data of a roi in the specified format (raw / tiff / png /hdf5 ).
-    The roi is specified by appending "?extents_min=x_y_z&extents_max=x_y_z" to requested the URL.
-    '''
-
-    start = list(map(int, request.args['extents_min'].split('_')))
-    stop = list(map(int, request.args['extents_max'].split('_')))
-    roi = createRoi(start, stop)
-
-    blocksToProcess = getBlocksInRoi(start, stop)
-    blockData = [getBlockRawData(b, withHalo=False) for b in blocksToProcess]
-    data = combineBlocksToVolume(blocksToProcess, blockData, roi)
-
-    return returnDataInFormat(data, format)
-
-# --------------------------------------------------------------
-@app.route('/prediction/<format>/roi')
-@doc.doc()
-def get_prediction_roi(format):
-    '''
-    Get a predicted roi in the specified format (raw / tiff / png / hdf5).
-    The roi is specified by appending "?extents_min=x_y_z&extents_max=x_y_z" to requested the URL.
-    '''
-
-    start = list(map(int, request.args['extents_min'].split('_')))
-    stop = list(map(int, request.args['extents_max'].split('_')))
-    roi = createRoi(start, stop)
-
-    blocksToProcess = getBlocksInRoi(start, stop)
-    blockData = [processBlock(b) for b in blocksToProcess]
-    data = combineBlocksToVolume(blocksToProcess, blockData, roi)
-
     return returnDataInFormat(data, format)
 
 # --------------------------------------------------------------
@@ -362,4 +233,5 @@ if __name__ == '__main__':
     pixelClassificationBackend.configureSelectedFeatures(selectedFeatureScalePairs)
     pixelClassificationBackend.loadRandomForest(options.project, 'PixelClassification/ClassifierForests/Forest', 4)
 
-    app.run(host='0.0.0.0', port=options.port, debug=False)
+    app.run(host='0.0.0.0', port=options.port, debug=False, threaded=True)
+
