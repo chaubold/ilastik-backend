@@ -13,6 +13,7 @@ import vigra
 from pprint import pprint
 import redis
 import requests
+from requests.adapters import HTTPAdapter
 
 from flask import Flask, send_file, request
 from flask_autodoc import Autodoc
@@ -29,6 +30,7 @@ doc = Autodoc(app)
 # global variable storing the backend instance and the redis client
 pixelClassificationBackend = None
 redisClient = None
+session = requests.Session() # to allow connection pooling
 
 # --------------------------------------------------------------
 # Helper methods
@@ -43,7 +45,7 @@ def getBlockRawData(blockIdx):
     beginStr = '_'.join(map(str,roi.begin))
     endStr = '_'.join(map(str, roi.end))
 
-    r = requests.get('http://{ip}/raw/raw/roi?extents_min={b}&extents_max={e}'.format(ip=options.dataprovider_ip, b=beginStr, e=endStr), stream=True)
+    r = session.get('http://{ip}/raw/raw/roi?extents_min={b}&extents_max={e}'.format(ip=options.dataprovider_ip, b=beginStr, e=endStr), stream=True)
     if r.status_code != 200:
         raise RuntimeError("Could not get raw data of block {b} from {ip}".format(b=blockIdx, ip=options.dataprovider_ip))
     shape = roi.shape
@@ -160,19 +162,22 @@ if __name__ == '__main__':
         # get rid of previously stored blocks
         # clearCache()
 
+    # allow 5 retries for requests to dataprovider ip:
+    session.mount('http://{}'.format(options.dataprovider_ip), HTTPAdapter(max_retries=5))
+
     # read dataset config from data provider service
-    r = requests.get('http://{ip}/info/dtype'.format(ip=options.dataprovider_ip))
+    r = session.get('http://{ip}/info/dtype'.format(ip=options.dataprovider_ip))
     if r.status_code != 200:
         raise RuntimeError("Could not query datatype from dataprovider at ip: {}".format(options.dataprovider_ip))
     dtype = r.text
     
-    r = requests.get('http://{ip}/info/dim'.format(ip=options.dataprovider_ip))
+    r = session.get('http://{ip}/info/dim'.format(ip=options.dataprovider_ip))
     if r.status_code != 200:
         raise RuntimeError("Could not query dimensionaliy from dataprovider at ip: {}".format(options.dataprovider_ip))
     dim = int(r.text)
     blockShape = [options.blocksize] * dim
 
-    r = requests.get('http://{ip}/info/shape'.format(ip=options.dataprovider_ip))
+    r = session.get('http://{ip}/info/shape'.format(ip=options.dataprovider_ip))
     if r.status_code != 200:
         raise RuntimeError("Could not query shape from dataprovider at ip: {}".format(options.dataprovider_ip))
     shape = list(map(int, r.text.split('_')))
@@ -233,5 +238,5 @@ if __name__ == '__main__':
     pixelClassificationBackend.configureSelectedFeatures(selectedFeatureScalePairs)
     pixelClassificationBackend.loadRandomForest(options.project, 'PixelClassification/ClassifierForests/Forest', 4)
 
-    app.run(host='0.0.0.0', port=options.port, debug=False, threaded=True)
+    app.run(host='0.0.0.0', port=options.port, debug=False, processes=4)#, threaded=True)
 

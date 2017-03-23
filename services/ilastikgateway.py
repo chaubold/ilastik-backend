@@ -13,7 +13,8 @@ import vigra
 from pprint import pprint
 import redis
 import requests
-import concurrent.future
+from requests.adapters import HTTPAdapter
+import concurrent.futures
 
 from flask import Flask, send_file, request
 from flask_autodoc import Autodoc
@@ -29,7 +30,8 @@ doc = Autodoc(app)
 
 # global variable storing the backend instance and the redis client
 blocking = None
-executor = ThreadPoolExecutor(max_workers=40)
+executor = concurrent.futures.ThreadPoolExecutor(max_workers=40)
+session = requests.Session() # to allow connection pooling
 
 # --------------------------------------------------------------
 # Helper methods
@@ -44,7 +46,7 @@ def getBlockRawData(blockIdx):
     beginStr = '_'.join(map(str,roi.begin))
     endStr = '_'.join(map(str, roi.end))
 
-    r = requests.get('http://{ip}/raw/raw/roi?extents_min={b}&extents_max={e}'.format(ip=options.dataprovider_ip, b=beginStr, e=endStr), stream=True)
+    r = session.get('http://{ip}/raw/raw/roi?extents_min={b}&extents_max={e}'.format(ip=options.dataprovider_ip, b=beginStr, e=endStr), stream=True)
     if r.status_code != 200:
         raise RuntimeError("Could not get raw data of block {b} from {ip}".format(b=blockIdx, ip=options.dataprovider_ip))
     shape = roi.shape
@@ -59,7 +61,7 @@ def processBlock(blockIdx):
     '''
     assert 0 <= blockIdx < blocking.numberOfBlocks, "Invalid blockIdx selected"
     roi = blocking.getBlock(blockIdx)
-    r = requests.get('http://{ip}/prediction/raw/{b}'.format(ip=options.pixelclassification_ip, b=blockIdx), stream=True)
+    r = session.get('http://{ip}/prediction/raw/{b}'.format(ip=options.pixelclassification_ip, b=blockIdx), stream=True)
     if r.status_code != 200:
         raise RuntimeError("Could not get prediction of block {b} from {ip}".format(b=blockIdx, ip=options.pixelclassification_ip))
     shape = tuple(roi.shape) + (numClasses,)
@@ -165,7 +167,8 @@ def get_raw_roi(format):
     roi = createRoi(start, stop)
 
     blocksToProcess = getBlocksInRoi(start, stop)
-    blockData = [getBlockRawData(b) for b in blocksToProcess]
+    # blockData = [getBlockRawData(b) for b in blocksToProcess]
+    blockData = list(executor.map(getBlockRawData, blocksToProcess))
     data = combineBlocksToVolume(blocksToProcess, blockData, roi)
 
     return returnDataInFormat(data, format)
@@ -184,7 +187,8 @@ def get_prediction_roi(format):
     roi = createRoi(start, stop)
 
     blocksToProcess = getBlocksInRoi(start, stop)
-    blockData = [processBlock(b) for b in blocksToProcess]
+    blockData = list(executor.map(processBlock, blocksToProcess))
+    # blockData = [processBlock(b) for b in blocksToProcess]
     data = combineBlocksToVolume(blocksToProcess, blockData, roi)
 
     return returnDataInFormat(data, format)
@@ -239,24 +243,28 @@ if __name__ == '__main__':
     
     options = parser.parse_args()
 
+    # allow 5 retries for requests to dataprovider and pixelclassification ip:
+    session.mount('http://{}'.format(options.dataprovider_ip), HTTPAdapter(max_retries=5))
+    session.mount('http://{}'.format(options.pixelclassification_ip), HTTPAdapter(max_retries=5))
+
     # read dataset config from data provider service
-    r = requests.get('http://{ip}/info/dtype'.format(ip=options.dataprovider_ip))
+    r = session.get('http://{ip}/info/dtype'.format(ip=options.dataprovider_ip))
     if r.status_code != 200:
         raise RuntimeError("Could not query datatype from dataprovider at ip: {}".format(options.dataprovider_ip))
     rawDtype = r.text
     
-    r = requests.get('http://{ip}/info/dim'.format(ip=options.dataprovider_ip))
+    r = session.get('http://{ip}/info/dim'.format(ip=options.dataprovider_ip))
     if r.status_code != 200:
         raise RuntimeError("Could not query dimensionaliy from dataprovider at ip: {}".format(options.dataprovider_ip))
     dim = int(r.text)
     blockShape = [options.blocksize] * dim
 
-    r = requests.get('http://{ip}/info/shape'.format(ip=options.dataprovider_ip))
+    r = session.get('http://{ip}/info/shape'.format(ip=options.dataprovider_ip))
     if r.status_code != 200:
         raise RuntimeError("Could not query shape from dataprovider at ip: {}".format(options.dataprovider_ip))
     shape = list(map(int, r.text.split('_')))
 
-    r = requests.get('http://{ip}/prediction/numclasses'.format(ip=options.pixelclassification_ip))
+    r = session.get('http://{ip}/prediction/numclasses'.format(ip=options.pixelclassification_ip))
     if r.status_code != 200:
         raise RuntimeError("Could not query num classes from pixel classification at ip: {}".format(options.pixelclassification_ip))
     numClasses = int(r.text)
