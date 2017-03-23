@@ -5,6 +5,8 @@ from utils.servicehelper import returnDataInFormat
 from utils.voxels_nddata_codec import VoxelsNddataCodec
 import time
 import numpy as np
+import math, random, sys
+from operator import itemgetter
 app = Flask("datatransferperformancetester")
 
 shape = None
@@ -12,9 +14,33 @@ dtype = None
 block = None
 
 # --------------------------------------------------------------
+class ProgressBar:
+    def __init__(self, start=0, stop=100):
+        self._state = 0
+        self._start = start
+        self._stop = stop
+
+    def reset(self, val=0):
+        self._state = val
+
+    def show(self, increase=1):
+        self._state += increase
+        if self._state > self._stop:
+            self._state = self._stop
+
+        # show
+        pos = float(self._state - self._start)/(self._stop - self._start)
+        try:
+            sys.stdout.write("\r[%-20s] %d%%" % ('='*int(20*pos), (100*pos)))
+
+            if self._state == self._stop:
+                sys.stdout.write('\n')
+                sys.stdout.flush()
+        except IOError:
+            pass
+
+# --------------------------------------------------------------
 # Command line plotting taken from https://github.com/imh/hipsterplot/blob/master/hipsterplot.py
-import math, random, sys
-from operator import itemgetter
 
 CHAR_LOOKUP_SYMBOLS = [(0, ' '), # Should be sorted
                        (1, '.'),
@@ -152,6 +178,8 @@ if __name__ == '__main__':
         print("Using blocks of shape {} and dtype {} for speed test, {} bytes each...".format(shape, dtype, np.prod(shape) * np.dtype(dtype).type().nbytes))
 
         times = []
+        pb = ProgressBar(0,options.num_iterations)
+        pb.show(0)
 
         # get the block a fixed number of times
         for i in range(options.num_iterations):
@@ -162,6 +190,8 @@ if __name__ == '__main__':
             block = codec.decode_to_ndarray(r.raw, shape)
             endTime = time.time()
             times.append(endTime - startTime)
+            pb.show()
+        pb.show()
 
         print("Retrieving {} blocks of shape {} and dtype {} took:".format(options.num_iterations, shape, dtype))
         print("\ttotal:\t\t{} secs".format(sum(times)))
