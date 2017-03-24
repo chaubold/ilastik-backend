@@ -141,6 +141,8 @@ if __name__ == '__main__':
                         help='size of blocks in all 2 or 3 dimensions, used to blockify all processing')
     parser.add_argument('--clear-cache', action='store_true', 
                         help='clear the cache from all currently contained blocks!')
+    parser.add_argument('--num-workers', type=int, default=1, 
+                        help='number of worker threads')
     parser.add_argument('--verbose', dest='verbose', action='store_true',
                         help='Turn on verbose logging', default=False)
 
@@ -231,8 +233,10 @@ if __name__ == '__main__':
     pixelClassificationBackend.configureSelectedFeatures(selectedFeatureScalePairs)
     pixelClassificationBackend.loadRandomForest(options.project, 'PixelClassification/ClassifierForests/Forest', 4)
 
-    taskQueueSubscription = TaskQueueSubscription(processBlockCallback)
-    taskQueueSubscription.start()
+    print("Starting {} worker threads".format(options.num_workers))
+    for i in range(options.num_workers):
+        taskQueueSubscription = TaskQueueSubscription(processBlockCallback)
+        taskQueueSubscription.start()
 
-    app.run(host='0.0.0.0', port=options.port, debug=False)#, processes=4)#, threaded=True)
+    app.run(host='0.0.0.0', port=options.port, debug=False, threaded=True)#, processes=4)
 
