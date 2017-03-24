@@ -38,6 +38,7 @@ def get_raw_roi(format):
         stop = [shape[i]+x if x < 0 else x for i, x in enumerate(stop)]
 
         assert all(x >= 0 for x in start), "Cannot have negative start coordinates"
+        assert all(a < b for a,b in zip(start, stop)), "End point must be greater than start point"
         assert all(x < s for x, s in zip(start, shape)), "ROI begin exceeds shape of dataset"
         assert all(x <= s for x, s in zip(stop, shape)), "ROI end exceeds shape of dataset"
         

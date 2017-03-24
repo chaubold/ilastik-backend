@@ -33,7 +33,6 @@ docker run -d -p 6379:6379 --name redis bitnami/redis:latest
 docker run -d --hostname <your host name> -p 4369:4369 -p 25672:25672 -p 5671-5672:5671-5672 --name rabbitmq rabbitmq:3
 ```
 
-
 Where the parameters mean:
 * `-d` = run as daemon
 * `-p` port:port = forward this specific port from the container to localhost (e.g. 6379 is redis default)
@@ -80,6 +79,6 @@ So while data provider and pixel classification run on Python 3, this is must be
 python volumina_viewer.py --ilastik-ip 0.0.0.0:8080
 ```
 
-## Proposed communication scheme:
+## Proposed communication scheme for prediction blocks:
 
 ![](ilastik-microservice-communication.png)

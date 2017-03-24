@@ -20,14 +20,18 @@ from flask_autodoc import Autodoc
 import pyilastikbackend as pib
 from utils.servicehelper import returnDataInFormat, RedisCache
 from utils.voxels_nddata_codec import VoxelsNddataCodec
+from utils.queues import TaskQueueSubscription, FinishedQueuePublisher
 
 # flask setup
 app = Flask("pixelclassificationservice")
 doc = Autodoc(app)
+logger = logging.getLogger(__name__)
 
 # global variable storing the backend instance and the redis client
 pixelClassificationBackend = None
 cache = RedisCache()
+finishedQueuePublisher = FinishedQueuePublisher()
+taskQueueSubscription = None # is started after configuring the pixelClassificationBackend in main
 session = requests.Session() # to allow connection pooling
 
 # --------------------------------------------------------------
@@ -59,8 +63,8 @@ def processBlock(blockIdx):
     assert 0 <= blockIdx < pixelClassificationBackend.blocking.numberOfBlocks, "Invalid blockIdx selected"
     rawData = getBlockRawData(blockIdx)
 
-    cachedBlock = cache.readBlock(blockIdx)
-    if cachedBlock is not None:
+    cachedBlock, isDummy = cache.readBlock(blockIdx)
+    if not isDummy and cachedBlock is not None:
         return cachedBlock
     
     print("Input block {} min {} max {} dtype {} shape {}".format(blockIdx, rawData.min(), rawData.max(), rawData.dtype, rawData.shape))
@@ -79,6 +83,14 @@ def createRoi(start, stop):
         return pib.Block_2d(np.array(start), np.array(stop))
     elif dim == 3:
         return pib.Block_3d(np.array(start), np.array(stop))
+
+# --------------------------------------------------------------
+# entry point for incoming messages via the task queue
+# --------------------------------------------------------------
+def processBlockCallback(blockIdx):
+    logger.debug("processing block {} request from task queue".format(blockIdx))
+    processBlock(blockIdx)
+    finishedQueuePublisher.finished(str(blockIdx))
 
 # --------------------------------------------------------------
 # REST Api
@@ -219,5 +231,8 @@ if __name__ == '__main__':
     pixelClassificationBackend.configureSelectedFeatures(selectedFeatureScalePairs)
     pixelClassificationBackend.loadRandomForest(options.project, 'PixelClassification/ClassifierForests/Forest', 4)
 
-    app.run(host='0.0.0.0', port=options.port, debug=False, processes=4)#, threaded=True)
+    taskQueueSubscription = TaskQueueSubscription(processBlockCallback)
+    taskQueueSubscription.start()
+
+    app.run(host='0.0.0.0', port=options.port, debug=False)#, processes=4)#, threaded=True)
 

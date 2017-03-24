@@ -5,7 +5,6 @@ from flask import Flask, send_file, request
 from utils.voxels_nddata_codec import VoxelsNddataCodec
 import redis
 import logging
-
 logger = logging.getLogger(__name__)
 
 class Cache(object):
@@ -13,9 +12,16 @@ class Cache(object):
     def __init__(self):
         pass
 
-    def readBlock(self, blockIdx):
-        ''' try to find the block and its shape info and return the contents as numpy array '''
-        return None
+    def readBlock(self, blockIdx, insertDummyIfNotFound=False):
+        '''
+        Try to find the block and its shape info and return the contents as numpy array.
+
+        If insertDummyIfNotFound is True, it will check for the contents of the block or insert a dummy value atomically,
+        so that the next requests will see that somebody asked for that block before.
+
+        Returns a tuple (None or the block as numpy array, boolean flag specifying whether a dummy was found)
+        '''
+        return None, False
 
     def saveBlock(self, blockIdx, blockData):
         ''' store the block '''
@@ -31,8 +37,9 @@ class Cache(object):
 class RedisCache(Cache):
     ''' 
     A redis cache running at the specified ip and port.
-    To handle 
     '''
+    _dummyBlock = 'dummy'
+
     def __init__(self, ip='0.0.0.0:6379', maxmemory='500mb'):
         super(RedisCache, self).__init__()
         host, port = ip.split(':')
@@ -43,19 +50,34 @@ class RedisCache(Cache):
         self._redisClient.config_set('maxmemory', maxmemory)
         self._redisClient.config_set('maxmemory-policy', 'allkeys-lru')
 
-    def readBlock(self, blockIdx):
-        ''' try to find the block and its shape info and return the contents as numpy array '''
+    def readBlock(self, blockIdx, insertDummyIfNotFound=False):
+        '''
+        Try to find the block and its shape info and return the contents as numpy array.
+
+        If insertDummyIfNotFound is True, it will check for the contents of the block or insert a dummy value (not yet! atomically),
+        so that the next requests will see that somebody asked for that block before.
+
+        Returns a tuple (None or the block as numpy array, boolean flag specifying whether a dummy was found)
+        '''
+
         cachedBlock = self._redisClient.get('prediction-{}-block'.format(blockIdx))
         cachedShape = self._redisClient.get('prediction-{}-shape'.format(blockIdx))
         if cachedBlock and cachedShape:
+            # if we found a dummy block
+            if cachedShape.decode() == self._dummyBlock:
+                return None, True
             try:
                 cachedShape = cachedShape.decode().split('_')
                 shape, dtype = list(map(int, cachedShape[:-1])), cachedShape[-1]
                 logger.debug("Found block {} of shape {} and dtype {} in cache!".format(blockIdx, shape, dtype))
-                return np.fromstring(cachedBlock, dtype=dtype).reshape(shape)
+                return np.fromstring(cachedBlock, dtype=dtype).reshape(shape), False
             except:
+                if insertDummyIfNotFound:
+                    self._redisClient.set('prediction-{}-block'.format(blockIdx), '')
+                    self._redisClient.set('prediction-{}-shape'.format(blockIdx), self._dummyBlock)
                 logger.exception("ERROR when retrieving existing block from cache. Proceeding as if it was not found")
-        return None
+
+        return None, False
 
     def saveBlock(self, blockIdx, blockData):
         ''' store the block '''
