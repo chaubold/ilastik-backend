@@ -1,17 +1,15 @@
 '''
 The pixel classification service can take raw data and compute features and predict given a random forest
 '''
-
+import logging
 import json
 import tempfile
 import argparse
 import sys
-import traceback
 import numpy as np
 import h5py
 import vigra
 from pprint import pprint
-import redis
 import requests
 from requests.adapters import HTTPAdapter
 
@@ -20,7 +18,7 @@ from flask_autodoc import Autodoc
 
 # C++ module containing all the important methods
 import pyilastikbackend as pib
-from utils.servicehelper import returnDataInFormat
+from utils.servicehelper import returnDataInFormat, Cache, RedisCache
 from utils.voxels_nddata_codec import VoxelsNddataCodec
 
 # flask setup
@@ -29,7 +27,7 @@ doc = Autodoc(app)
 
 # global variable storing the backend instance and the redis client
 pixelClassificationBackend = None
-redisClient = None
+cache = Cache()
 session = requests.Session() # to allow connection pooling
 
 # --------------------------------------------------------------
@@ -54,38 +52,6 @@ def getBlockRawData(blockIdx):
 
     return rawData
 
-def readBlockFromCache(blockIdx):
-    ''' if a redis client was initialized, try to find the block and its shape info and return the contents as numpy array '''
-    if redisClient is not None:
-        # read from cache
-        cachedBlock = redisClient.get('prediction-{}-block'.format(blockIdx))
-        cachedShape = redisClient.get('prediction-{}-shape'.format(blockIdx))
-        if cachedBlock and cachedShape:
-            try:
-                cachedShape = cachedShape.decode().split('_')
-                shape, dtype = list(map(int, cachedShape[:-1])), cachedShape[-1]
-                print("Found block {} of shape {} and dtype {} in cache!".format(blockIdx, shape, dtype))
-                return np.fromstring(cachedBlock, dtype=dtype).reshape(shape)
-            except:
-                print("ERROR when retrieving block from cache:")
-                traceback.print_exc(file=sys.stdout)
-    return None
-
-def saveBlockToChache(blockIdx, blockData):
-    ''' if a redis client was initialized, store the block there '''
-    if redisClient is not None:
-        # save to cache
-        redisClient.set('prediction-{}-block'.format(blockIdx), blockData.tostring())
-        shapeStr = '_'.join([str(d) for d in blockData.shape] + [str(blockData.dtype)])
-        print(shapeStr)
-        redisClient.set('prediction-{}-shape'.format(blockIdx), shapeStr)
-
-def clearCache():
-    ''' Remove all prediction blocks and their shapes from the cache '''
-    if redisClient is not None:
-        for k in redisClient.scan_iter(match='prediction-*'):
-            redisClient.delete(k)
-
 def processBlock(blockIdx):
     '''
     Main computational method for processing blocks
@@ -93,17 +59,17 @@ def processBlock(blockIdx):
     assert 0 <= blockIdx < pixelClassificationBackend.blocking.numberOfBlocks, "Invalid blockIdx selected"
     rawData = getBlockRawData(blockIdx)
 
-    cachedBlock = readBlockFromCache(blockIdx)
+    cachedBlock = cache.readBlock(blockIdx)
     if cachedBlock is not None:
         return cachedBlock
     
-    print("Input block min {} max {} dtype {} shape {}".format(rawData.min(), rawData.max(), rawData.dtype, rawData.shape))
+    print("Input block {} min {} max {} dtype {} shape {}".format(blockIdx, rawData.min(), rawData.max(), rawData.dtype, rawData.shape))
     features = pixelClassificationBackend.computeFeaturesOfBlock(blockIdx, rawData)
     print("Feature block min {} max {} dtype {} shape {}".format(features.min(), features.max(), features.dtype, features.shape))
     predictions = pixelClassificationBackend.computePredictionsOfBlock(blockIdx, features)
     print("Prediction block min {} max {} dtype {} shape {}".format(predictions.min(), predictions.max(), predictions.dtype, predictions.shape))
 
-    saveBlockToChache(blockIdx, predictions)
+    cache.saveBlock(blockIdx, predictions)
     
     return predictions
 
@@ -132,6 +98,13 @@ def get_prediction_num_classes():
     return str(pixelClassificationBackend.numberOfClasses)
 
 # --------------------------------------------------------------
+@app.route('/prediction/cachedblockids')
+@doc.doc()
+def get_prediction_list_cached_blocks():
+    ''' Return a list of blockIds which are already in cache '''
+    return str(', '.join([str(b) for b in cache.listCachedBlocks()]))
+
+# --------------------------------------------------------------
 @app.route('/doc')
 def documentation():
     ''' serve an API documentation '''
@@ -154,13 +127,20 @@ if __name__ == '__main__':
                         help='size of blocks in all 2 or 3 dimensions, used to blockify all processing')
     parser.add_argument('--use-caching', action='store_true', 
                         help='use caching for features and predictions, assumes a redis server to be running!')
+    parser.add_argument('--verbose', dest='verbose', action='store_true',
+                        help='Turn on verbose logging', default=False)
 
     options = parser.parse_args()
 
+    if options.verbose:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
+
     if options.use_caching:
-        redisClient = redis.StrictRedis()
+        cache = RedisCache()
         # get rid of previously stored blocks
-        # clearCache()
+        # cache.clear()
 
     # allow 5 retries for requests to dataprovider ip:
     session.mount('http://{}'.format(options.dataprovider_ip), HTTPAdapter(max_retries=5))
