@@ -18,7 +18,7 @@ from flask_autodoc import Autodoc
 
 # C++ module containing all the important methods
 import pyilastikbackend as pib
-from utils.servicehelper import returnDataInFormat, Cache, RedisCache
+from utils.servicehelper import returnDataInFormat, RedisCache
 from utils.voxels_nddata_codec import VoxelsNddataCodec
 
 # flask setup
@@ -27,7 +27,7 @@ doc = Autodoc(app)
 
 # global variable storing the backend instance and the redis client
 pixelClassificationBackend = None
-cache = Cache()
+cache = RedisCache()
 session = requests.Session() # to allow connection pooling
 
 # --------------------------------------------------------------
@@ -81,6 +81,8 @@ def createRoi(start, stop):
         return pib.Block_3d(np.array(start), np.array(stop))
 
 # --------------------------------------------------------------
+# REST Api
+# --------------------------------------------------------------
 @app.route('/prediction/<format>/<int:blockIdx>')
 @doc.doc()
 def get_prediction(format, blockIdx):
@@ -125,8 +127,8 @@ if __name__ == '__main__':
                         help='ip and port of dataprovider')
     parser.add_argument('--blocksize', type=int, default=64, 
                         help='size of blocks in all 2 or 3 dimensions, used to blockify all processing')
-    parser.add_argument('--use-caching', action='store_true', 
-                        help='use caching for features and predictions, assumes a redis server to be running!')
+    parser.add_argument('--clear-cache', action='store_true', 
+                        help='clear the cache from all currently contained blocks!')
     parser.add_argument('--verbose', dest='verbose', action='store_true',
                         help='Turn on verbose logging', default=False)
 
@@ -137,10 +139,9 @@ if __name__ == '__main__':
     else:
         logging.basicConfig(level=logging.INFO)
 
-    if options.use_caching:
-        cache = RedisCache()
+    if options.clear_cache:
         # get rid of previously stored blocks
-        # cache.clear()
+        cache.clear()
 
     # allow 5 retries for requests to dataprovider ip:
     session.mount('http://{}'.format(options.dataprovider_ip), HTTPAdapter(max_retries=5))

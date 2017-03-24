@@ -55,7 +55,7 @@ def getBlockRawData(blockIdx):
 
     return rawData
 
-def processBlock(blockIdx):
+def getBlockPrediction(blockIdx):
     '''
     Get the prediction of a block
     '''
@@ -154,6 +154,8 @@ def createRoi(start, stop):
         return pib.Block_3d(np.array(start), np.array(stop))
 
 # --------------------------------------------------------------
+# REST Api
+# --------------------------------------------------------------
 @app.route('/raw/<format>/roi')
 @doc.doc()
 def get_raw_roi(format):
@@ -187,8 +189,8 @@ def get_prediction_roi(format):
     roi = createRoi(start, stop)
 
     blocksToProcess = getBlocksInRoi(start, stop)
-    blockData = list(executor.map(processBlock, blocksToProcess))
-    # blockData = [processBlock(b) for b in blocksToProcess]
+    blockData = list(executor.map(getBlockPrediction, blocksToProcess))
+    # blockData = [getBlockPrediction(b) for b in blocksToProcess]
     data = combineBlocksToVolume(blocksToProcess, blockData, roi)
 
     return returnDataInFormat(data, format)
