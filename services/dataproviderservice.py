@@ -97,6 +97,8 @@ if __name__ == '__main__':
                         help='path inside raw data HDF5 file to the raw data volume')
     parser.add_argument('--raw-data-axes', type=str, default='txyzc',
                         help='Axes description of the dataset')
+    parser.add_argument('--max-size', type=int, nargs=5, default=None,
+                        help='Optional maximum size parameter if not the full dataset should be served')
     
     options = parser.parse_args()
     inputAxes = options.raw_data_axes
@@ -106,9 +108,14 @@ if __name__ == '__main__':
         dtype = str(raw[options.raw_data_path].dtype)
         shape = adjustCoordinateAxesOrder(raw[options.raw_data_path].shape, inputAxes, 'txyzc', allowAxisDrop=False)
 
+        if options.max_size is not None:
+            shape = np.minimum(shape, options.max_size)
+
         dim = 3
         if shape[3] == 1:
             dim = 2
+
+    print("Serving dataset of dim {} and shape {}".format(dim, shape))
 
     app.run(host='0.0.0.0', port=options.port, debug=False, threaded=True)
 
