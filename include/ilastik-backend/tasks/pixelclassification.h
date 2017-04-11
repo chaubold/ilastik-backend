@@ -56,7 +56,7 @@ struct adjust_dims_to_5d_block<3, TYPE>
 {
     vigra::MultiArrayView<5, TYPE> operator()(const vigra::MultiArrayView<3, TYPE>& data) const
     {
-        return data.insertSingletonDimension(3).insertSingletonDimension(0);
+        return data.insertSingletonDimension(2).insertSingletonDimension(0);
     }
 };
 
@@ -120,12 +120,12 @@ public:
             throw std::runtime_error("Error when loading random forest!");
     }
 
-    void save_random_forest(const std::string& filename, const std::string& path_in_file, size_t num_zeros_in_forest_name)
+    void save_random_forest(const std::string& filename, const std::string& path_in_file, size_t num_zeros_in_forest_name) const
     {
         // TODO implement me
     }
 
-    features_array_type compute_features_of_block(size_t blockIndex, const raw_array_type& raw_data)
+    features_array_type compute_features_of_block(size_t blockIndex, const raw_array_type& raw_data) const
     {
         // check preconditions
         if(selected_features_.empty())
@@ -146,10 +146,13 @@ public:
         // compute features
 
         vigra::MultiArray<5, OUT_TYPE> converted_raw_data(raw_data);
-        vigra::MultiArrayView<DIM, OUT_TYPE> dim_adjusted_raw_data = adjust_5d_block_for_dims<DIM, OUT_TYPE>()(converted_raw_data);
+        std::cout << "Got raw data of shape " << raw_data.shape() << std::endl;
+        vigra::MultiArrayView<DIM, OUT_TYPE> dim_adjusted_raw_data(adjust_5d_block_for_dims<DIM, OUT_TYPE>()(converted_raw_data));
+        std::cout << "Adjusted raw data shape to " << dim_adjusted_raw_data.shape() << std::endl;
 
         vigra::MultiArray<DIM+1, OUT_TYPE> out_array;
         feature_calculator_->calculate(dim_adjusted_raw_data, out_array);
+        std::cout << "Done computing features " << std::endl;
 
         // cut away the halo
         const utils::Block<5>& localCore  = blockWithHalo.innerBlockLocal();
@@ -165,7 +168,8 @@ public:
         coreBegin[DIM] = 0;
         coreShape[DIM] = feature_calculator_->get_feature_size();
 
-        vigra::MultiArray<DIM+1, OUT_TYPE> cropped_features = out_array.subarray(coreBegin, coreBegin + coreShape);
+        vigra::MultiArray<DIM+1, OUT_TYPE> cropped_features(out_array.subarray(coreBegin, coreBegin + coreShape));
+        std::cout << "resulting features have shape" << cropped_features.shape() << std::endl;
 
         return adjust_dims_to_5d_block<DIM+1, OUT_TYPE>()(cropped_features);
     }
@@ -182,7 +186,7 @@ public:
         return random_forest_vector_[0].class_count();
     }
 
-    predictions_array_type predict_for_block(const features_array_type& feature_data)
+    predictions_array_type predict_for_block(const features_array_type& feature_data) const
     {
         // preconditions
         if(random_forest_vector_.empty())
@@ -191,7 +195,7 @@ public:
         size_t num_pixel_classification_labels = random_forest_vector_[0].class_count();
         size_t num_required_features = random_forest_vector_[0].feature_count();
 
-        if(num_required_features != feature_data.shape(DIM))
+        if(num_required_features != feature_data.shape(4))
             throw std::runtime_error("Provided number of features did not match the one required by the random forest");
 
         // ------------------------------------------------------------
@@ -219,12 +223,12 @@ public:
         prediction_map /= random_forest_vector_.size();
 
         auto prediction_map_shape = feature_data.shape();
-        prediction_map_shape[DIM] = num_pixel_classification_labels; // has DIM+1 entries, so DIM is last one
+        prediction_map_shape[4] = num_pixel_classification_labels;
 
         return predictions_array_type(prediction_map_shape, prediction_map.data());
     }
 
-    utils::Block<5> get_required_raw_roi_for_feature_computation_of_block(size_t blockIndex)
+    utils::Block<5> get_required_raw_roi_for_feature_computation_of_block(size_t blockIndex) const
     {
         if(selected_features_.empty())
             throw std::runtime_error("No feature selection provided yet, cannot compute halo");
@@ -237,11 +241,10 @@ public:
     utils::Blocking<5> get_blocking() const
     { return blocking_; }
 
-
-    bool is_cache_valid()
+    bool is_cache_valid() const
     { return is_cache_valid_; }
 
-    coordinate get_halo_size()
+    coordinate get_halo_size() const
     { return halo_size_; }
 
 private:

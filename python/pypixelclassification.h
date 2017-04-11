@@ -39,12 +39,12 @@ public:
         pixelclassification_.load_random_forest(filename, path_in_file, num_zeros_in_forest_name);
     }
 
-    void save_random_forest(const std::string& filename, const std::string& path_in_file, size_t num_zeros_in_forest_name)
+    void save_random_forest(const std::string& filename, const std::string& path_in_file, size_t num_zeros_in_forest_name) const
     {
         pixelclassification_.save_random_forest(filename, path_in_file, num_zeros_in_forest_name);
     }
 
-    np_features_array compute_features_of_block(size_t blockIndex, const np_raw_array& raw_data)
+    np_features_array compute_features_of_block(size_t blockIndex, const np_raw_array& raw_data) const
     {
         auto vigra_raw = numpy_to_vigra<5, IN_TYPE>(raw_data);
         vigra::MultiArrayView<5, OUT_TYPE> result;
@@ -52,10 +52,11 @@ public:
             pybind11::gil_scoped_release release;
             result = pixelclassification_.compute_features_of_block(blockIndex, vigra_raw);
         }
+        std::cout << "Result has shape"  << result.shape() << std::endl;
         return vigra_to_numpy<5, OUT_TYPE>(result);
     }
 
-    np_predictions_array predict_for_block(const np_features_array& feature_data)
+    np_predictions_array predict_for_block(const np_features_array& feature_data) const
     {
         auto vigra_features = numpy_to_vigra<5, OUT_TYPE>(feature_data);
         vigra::MultiArrayView<5, OUT_TYPE> result;
@@ -66,7 +67,7 @@ public:
         return vigra_to_numpy<5, OUT_TYPE>(result);
     }
 
-    PyBlock<5> get_required_raw_roi_for_feature_computation_of_block(size_t blockIndex)
+    PyBlock<5> get_required_raw_roi_for_feature_computation_of_block(size_t blockIndex) const
     {
         return PyBlock<5>(pixelclassification_.get_required_raw_roi_for_feature_computation_of_block(blockIndex));
     }
@@ -77,7 +78,7 @@ public:
     bool is_cache_valid()
     { return pixelclassification_.is_cache_valid(); }
 
-    coordinate_array get_halo_size()
+    coordinate_array get_halo_size() const
     { return tiny_vector_to_numpy<5, coordinate_type>(pixelclassification_.get_halo_size()); }
 
     const size_t get_num_features() const
