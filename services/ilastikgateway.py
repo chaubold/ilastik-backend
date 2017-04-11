@@ -84,11 +84,12 @@ def getBlocksInRoi(start, stop):
     startIdx = blocking.getSurroundingBlockIndex(start)
     startBlock = blocking.getBlock(startIdx)
 
+    stop = np.asarray(stop) - 1 # stop is exclusive but the "surroundingBlockIndex" check works inclusive
     stopIdx = blocking.getSurroundingBlockIndex(stop)
     stopBlock = blocking.getBlock(stopIdx)
 
     shape = stopBlock.end - startBlock.begin
-    blocksPerDim = np.ceil(shape / blocking.blockShape)
+    blocksPerDim = np.floor(shape / blocking.blockShape)
 
     blockIds = []
     coord = np.zeros_like(start)
@@ -105,7 +106,7 @@ def getBlocksInRoi(start, stop):
                 else:
                     blockIds.append(blocking.getSurroundingBlockIndex(coord))
 
-    print("Range {}-{} is covered by blocks: {}".format(start, stop, blockIds))
+    print("Range {}-{} is covered by blocks: {}".format(start, stop+1, blockIds))
 
     return blockIds
 
