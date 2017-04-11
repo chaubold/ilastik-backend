@@ -24,7 +24,7 @@ public:
 public:
     PyPixelClassification(){}
 
-    void configure_dataset_size(PyBlocking<DIM> blocking)
+    void configure_dataset_size(PyBlocking<5> blocking)
     {
         pixelclassification_.configure_dataset_size(blocking.getBlocking());
     }
@@ -46,39 +46,39 @@ public:
 
     np_features_array compute_features_of_block(size_t blockIndex, const np_raw_array& raw_data)
     {
-        auto vigra_raw = numpy_to_vigra<DIM, IN_TYPE>(raw_data);
-        vigra::MultiArrayView<DIM+1, OUT_TYPE> result;
+        auto vigra_raw = numpy_to_vigra<5, IN_TYPE>(raw_data);
+        vigra::MultiArrayView<5, OUT_TYPE> result;
         {
             pybind11::gil_scoped_release release;
             result = pixelclassification_.compute_features_of_block(blockIndex, vigra_raw);
         }
-        return vigra_to_numpy<DIM+1, OUT_TYPE>(result);
+        return vigra_to_numpy<5, OUT_TYPE>(result);
     }
 
-    np_predictions_array predict_for_block(size_t blockIndex, const np_features_array& feature_data)
+    np_predictions_array predict_for_block(const np_features_array& feature_data)
     {
-        auto vigra_features = numpy_to_vigra<DIM+1, OUT_TYPE>(feature_data);
-        vigra::MultiArrayView<DIM+1, OUT_TYPE> result;
+        auto vigra_features = numpy_to_vigra<5, OUT_TYPE>(feature_data);
+        vigra::MultiArrayView<5, OUT_TYPE> result;
         {
             pybind11::gil_scoped_release release;
-            result = pixelclassification_.predict_for_block(blockIndex, vigra_features);
+            result = pixelclassification_.predict_for_block(vigra_features);
         }
-        return vigra_to_numpy<DIM+1, OUT_TYPE>(result);
+        return vigra_to_numpy<5, OUT_TYPE>(result);
     }
 
-    PyBlock<DIM> get_required_raw_roi_for_feature_computation_of_block(size_t blockIndex)
+    PyBlock<5> get_required_raw_roi_for_feature_computation_of_block(size_t blockIndex)
     {
-        return PyBlock<DIM>(pixelclassification_.get_required_raw_roi_for_feature_computation_of_block(blockIndex));
+        return PyBlock<5>(pixelclassification_.get_required_raw_roi_for_feature_computation_of_block(blockIndex));
     }
 
-    PyBlocking<DIM> get_blocking() const
-    { return PyBlocking<DIM>(pixelclassification_.get_blocking()); }
+    PyBlocking<5> get_blocking() const
+    { return PyBlocking<5>(pixelclassification_.get_blocking()); }
 
     bool is_cache_valid()
     { return pixelclassification_.is_cache_valid(); }
 
     coordinate_array get_halo_size()
-    { return tiny_vector_to_numpy<DIM, coordinate_type>(pixelclassification_.get_halo_size()); }
+    { return tiny_vector_to_numpy<5, coordinate_type>(pixelclassification_.get_halo_size()); }
 
     const size_t get_num_features() const
     { return pixelclassification_.get_num_features(); }

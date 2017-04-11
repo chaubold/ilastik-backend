@@ -21,8 +21,11 @@ void export_pixel_classification(pybind11::module& m)
 
 void export_blocking(py::module& m)
 {
-    export_blockingT<2>(m);
-    export_blockingT<3>(m);
+//    export_blockingT<2>(m);
+//    export_blockingT<3>(m);
+//    export_blockingT<4>(m);
+    // we only use 5D blocking!
+    export_blockingT<5>(m);
 }
 
 

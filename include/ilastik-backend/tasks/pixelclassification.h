@@ -12,10 +12,68 @@ namespace ilastikbackend
 namespace tasks
 {
 
+// helper to get from 5D to DIMs
+template<int DIM, typename TYPE>
+struct adjust_5d_block_for_dims
+{
+    vigra::MultiArrayView<DIM, TYPE> operator()(const vigra::MultiArrayView<5, TYPE>& data) const
+    {
+        throw std::runtime_error("adjust_5d_block_for_dims::operator() not implemented for these template params");
+    }
+};
+
+template<typename TYPE>
+struct adjust_5d_block_for_dims<2, TYPE>
+{
+    vigra::MultiArrayView<2, TYPE> operator()(const vigra::MultiArrayView<5, TYPE>& data) const
+    {
+        vigra::MultiArrayView<3, TYPE> squeezed_converted_raw_data(data.template bind<4>(0).template bind<0>(0));
+        return vigra::MultiArrayView<2, TYPE>(squeezed_converted_raw_data.template bind<2>(0));
+    }
+};
+
+template<typename TYPE>
+struct adjust_5d_block_for_dims<3, TYPE>
+{
+    vigra::MultiArrayView<3, TYPE> operator()(const vigra::MultiArrayView<5, TYPE>& data) const
+    {
+        return data.template bind<4>(0).template bind<0>(0);
+    }
+};
+
+// helper to get from DIMs to 5D
+template<int DIM, typename TYPE>
+struct adjust_dims_to_5d_block
+{
+    vigra::MultiArrayView<5, TYPE> operator()(const vigra::MultiArrayView<DIM, TYPE>& data) const
+    {
+        throw std::runtime_error("adjust_dims_to_5d_block::operator() not implemented for these template params");
+    }
+};
+
+template<typename TYPE>
+struct adjust_dims_to_5d_block<3, TYPE>
+{
+    vigra::MultiArrayView<5, TYPE> operator()(const vigra::MultiArrayView<3, TYPE>& data) const
+    {
+        return data.insertSingletonDimension(3).insertSingletonDimension(0);
+    }
+};
+
+template<typename TYPE>
+struct adjust_dims_to_5d_block<4, TYPE>
+{
+    vigra::MultiArrayView<5, TYPE> operator()(const vigra::MultiArrayView<4, TYPE>& data) const
+    {
+        return data.insertSingletonDimension(0);
+    }
+};
+
 /**
  * A pixel classification task can compute features; and train, or predict a random forest.
  * It is used as computational backend from a python microservice.
  *
+ * DIM is 2 or 3 for the dimensionality of the data per timestep. Data is assumed to also have a time (axis=0) and channel (axis=-1) dimension
  * IN_TYPE is the raw data input type
  * OUT_TYPE is used for the features as well as the predictions, and should be float or double
  */
@@ -25,10 +83,9 @@ class pixel_classification_task
 public:
     // typedefs
     using selected_features_type = std::vector<std::pair<std::string, OUT_TYPE>>;
-    using coordinate = vigra::TinyVector<int64_t, DIM>;
-    using multichannel_coordinate = vigra::TinyVector<int64_t, DIM+1>;
-    using raw_array_type = vigra::MultiArrayView<DIM, IN_TYPE>;
-    using features_array_type = vigra::MultiArrayView<DIM+1, OUT_TYPE>;
+    using coordinate = vigra::TinyVector<int64_t, 5>;
+    using raw_array_type = vigra::MultiArrayView<5, IN_TYPE>;
+    using features_array_type = vigra::MultiArrayView<5, OUT_TYPE>;
     using predictions_array_type = features_array_type;
     using feature_calculator_t =  utils::FeatureCalculator<DIM, OUT_TYPE>;
 
@@ -38,7 +95,7 @@ public:
     { }
 
     // API
-    void configure_dataset_size(utils::Blocking<DIM> blocking)
+    void configure_dataset_size(utils::Blocking<5> blocking)
     {
         blocking_ = blocking;
         is_cache_valid_ = false;
@@ -48,8 +105,12 @@ public:
     {
         selected_features_ = features;
         feature_calculator_ = std::make_shared<feature_calculator_t>(features);
-        size_t num_feature_channels = feature_calculator_->get_feature_size();
-        halo_size_ = feature_calculator_->getHaloShape();
+        vigra::TinyVector<int64_t, DIM> per_frame_halo = feature_calculator_->getHaloShape();
+        if(DIM==2)
+            halo_size_ = coordinate(0, per_frame_halo[0], per_frame_halo[1], 0, 0);
+        else
+            halo_size_ = coordinate(0, per_frame_halo[0], per_frame_halo[1], per_frame_halo[2], 0);
+
         is_cache_valid_ = false;
     }
 
@@ -70,31 +131,43 @@ public:
         if(selected_features_.empty())
             throw std::runtime_error("No feature selection provided yet, cannot compute features!");
 
-        const utils::BlockWithHalo<DIM>& blockWithHalo = blocking_.getBlockWithHalo(blockIndex, halo_size_);
+        const utils::BlockWithHalo<5>& blockWithHalo = blocking_.getBlockWithHalo(blockIndex, halo_size_);
         if(raw_data.shape() != blockWithHalo.outerBlock().shape())
             throw std::runtime_error("Provided raw data block does not have the required shape!");
 
+        if(raw_data.shape(0) != 1)
+            throw std::runtime_error("Can only compute features per time frame!");
+        if(raw_data.shape(4) != 1)
+            throw std::runtime_error("Cannot work with multi-channel images yet!");
+        if(DIM==2 && raw_data.shape(3) != 1)
+            throw std::runtime_error("When using 2D pixel classification you cannot pass 3D blocks!");
+
         // ------------------------------------------------------------
         // compute features
-        vigra::MultiArray<DIM, OUT_TYPE> converted_raw_data(raw_data);
+
+        vigra::MultiArray<5, OUT_TYPE> converted_raw_data(raw_data);
+        vigra::MultiArrayView<DIM, OUT_TYPE> dim_adjusted_raw_data = adjust_5d_block_for_dims<DIM, OUT_TYPE>()(converted_raw_data);
+
         vigra::MultiArray<DIM+1, OUT_TYPE> out_array;
-        feature_calculator_->calculate(converted_raw_data, out_array);
+        feature_calculator_->calculate(dim_adjusted_raw_data, out_array);
 
         // cut away the halo
-        const utils::Block<DIM>& localCore  = blockWithHalo.innerBlockLocal();
+        const utils::Block<5>& localCore  = blockWithHalo.innerBlockLocal();
         const coordinate& localBegin = localCore.begin();
         const coordinate& localShape = localCore.shape();
 
-        multichannel_coordinate coreBegin;
-        multichannel_coordinate coreShape;
+        vigra::TinyVector<int64_t, DIM+1> coreBegin;
+        vigra::TinyVector<int64_t, DIM+1> coreShape;
         for(int d = 0; d < DIM; d++){
-            coreBegin[d] = localBegin[d];
-            coreShape[d]  = localShape[d];
+            coreBegin[d] = localBegin[d + 1]; // skip time dimension in localBegin and localShape!
+            coreShape[d]  = localShape[d + 1];
         }
         coreBegin[DIM] = 0;
         coreShape[DIM] = feature_calculator_->get_feature_size();
 
-        return features_array_type(vigra::MultiArray<DIM+1, OUT_TYPE>(out_array.subarray(coreBegin, coreBegin + coreShape)));
+        vigra::MultiArray<DIM+1, OUT_TYPE> cropped_features = out_array.subarray(coreBegin, coreBegin + coreShape);
+
+        return adjust_dims_to_5d_block<DIM+1, OUT_TYPE>()(cropped_features);
     }
 
     const size_t get_num_features() const
@@ -109,7 +182,7 @@ public:
         return random_forest_vector_[0].class_count();
     }
 
-    predictions_array_type predict_for_block(size_t blockIndex, const features_array_type& feature_data)
+    predictions_array_type predict_for_block(const features_array_type& feature_data)
     {
         // preconditions
         if(random_forest_vector_.empty())
@@ -125,7 +198,8 @@ public:
         // transform to a feature view for prediction
 
         size_t pixel_count = 1;
-        for (size_t dim = 0; dim < DIM; dim++) {
+        for (size_t dim = 0; dim < 4; dim++) // num pixels is not dependent on the number of features, so only sum coordinate axes
+        {
           pixel_count *= feature_data.shape(dim);
         }
         vigra::MultiArrayView<2, OUT_TYPE> feature_view(vigra::Shape2(pixel_count, num_required_features), feature_data.data());
@@ -150,7 +224,7 @@ public:
         return predictions_array_type(prediction_map_shape, prediction_map.data());
     }
 
-    utils::Block<DIM> get_required_raw_roi_for_feature_computation_of_block(size_t blockIndex)
+    utils::Block<5> get_required_raw_roi_for_feature_computation_of_block(size_t blockIndex)
     {
         if(selected_features_.empty())
             throw std::runtime_error("No feature selection provided yet, cannot compute halo");
@@ -160,7 +234,7 @@ public:
         return blocking_.getBlockWithHalo(blockIndex, halo_size_).outerBlock();
     }
 
-    utils::Blocking<DIM> get_blocking() const
+    utils::Blocking<5> get_blocking() const
     { return blocking_; }
 
 
@@ -172,7 +246,7 @@ public:
 
 private:
     // members
-    utils::Blocking<DIM> blocking_;
+    utils::Blocking<5> blocking_;
     selected_features_type selected_features_;
     coordinate halo_size_;
     std::shared_ptr<feature_calculator_t> feature_calculator_;

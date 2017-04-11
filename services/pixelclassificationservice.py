@@ -130,9 +130,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run a pixel classification service',
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-p', '--port', type=int, default=8888, help='port on which to run service')
-    # parser.add_argument('-d', '--dim', type=int, default=2, help='Whether the service should deal with 2D or 3D data.')
-    # parser.add_argument('-t', '--dtype', type=str, default='uint8',
-    #                     help='Which format the input data has, one of [uint8, uint16, float].')
     parser.add_argument('--project', type=str, required=True, 
                         help='ilastik project with trained random forest')
     parser.add_argument('--dataprovider-ip', type=str, required=True, 
