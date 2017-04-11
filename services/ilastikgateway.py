@@ -64,10 +64,13 @@ def getBlockPrediction(blockIdx):
     '''
     assert 0 <= blockIdx < blocking.numberOfBlocks, "Invalid blockIdx selected"
     roi = blocking.getBlock(blockIdx)
+
     r = session.get('http://{ip}/prediction/raw/{b}'.format(ip=options.pixelclassification_ip, b=blockIdx), stream=True)
     if r.status_code != 200:
         raise RuntimeError("Could not get prediction of block {b} from {ip}".format(b=blockIdx, ip=options.pixelclassification_ip))
-    shape = tuple(roi.shape) + (numClasses,)
+    
+    shape = roi.shape
+    shape[-1] = numClasses
 
     codec = VoxelsNddataCodec('float32')
     rawData = codec.decode_to_ndarray(r.raw, shape)
@@ -89,16 +92,18 @@ def getBlocksInRoi(start, stop):
 
     blockIds = []
     coord = np.zeros_like(start)
-    for x in range(int(blocksPerDim[0])):
-        coord[0] = startBlock.begin[0] + blocking.blockShape[0] * x
-        for y in range(int(blocksPerDim[1])):
-            coord[1] = startBlock.begin[1] + blocking.blockShape[1] * y
-            if dim == 3:
-                for z in range(int(blocksPerDim[2])):
-                    coord[2] = startBlock.begin[2] + blocking.blockShape[2] * z
+    for t in range(int(blocksPerDim[0])):
+        coord[0] = startBlock.begin[0] + blocking.blockShape[0] * t
+        for x in range(int(blocksPerDim[1])):
+            coord[1] = startBlock.begin[1] + blocking.blockShape[1] * x
+            for y in range(int(blocksPerDim[2])):
+                coord[2] = startBlock.begin[2] + blocking.blockShape[2] * y
+                if dim == 3:
+                    for z in range(int(blocksPerDim[3])):
+                        coord[3] = startBlock.begin[3] + blocking.blockShape[3] * z
+                        blockIds.append(blocking.getSurroundingBlockIndex(coord))
+                else:
                     blockIds.append(blocking.getSurroundingBlockIndex(coord))
-            else:
-                blockIds.append(blocking.getSurroundingBlockIndex(coord))
 
     print("Range {}-{} is covered by blocks: {}".format(start, stop, blockIds))
 
@@ -106,8 +111,9 @@ def getBlocksInRoi(start, stop):
 
 def combineBlocksToVolume(blockIds, blockContents, roi=None):
     '''
-    Stitch blocks into one numpy volume, which will have the size of the 
-    smallest bounding box containing all specified blocks or the size of the provided roi (which should have .begin, .end, and .shape)
+    Stitch blocks into one 5D numpy volume, which will have the size of the 
+    smallest bounding box containing all specified blocks or the size of the provided roi (which should have .begin, .end, and .shape).
+    The number of channels (last axis) will be adjusted to match the block contents
     '''
     assert len(blockIds) == len(blockContents), "Must provide the same number of block indices and contents"
     assert len(blockContents) > 0, "Cannot combine zero blocks"
@@ -121,40 +127,27 @@ def combineBlocksToVolume(blockIds, blockContents, roi=None):
         assert all(start <= roi.begin), "Provided blocks do not start at roi beginning"
         assert all(roi.end <= stop), "Provided blocks end at {} before roi end {}".format(stop, roi.end)
 
-    additionalAxes = blockContents[0].shape[dim:]
-    print("additional axes: {}".format(additionalAxes))
-    if len(additionalAxes) > 0:
-        volume = np.zeros(tuple(shape) + additionalAxes, dtype=blockContents[0].dtype)
-    else:
-        volume = np.zeros(shape, dtype=blockContents[0].dtype)
+    numChannels = blockContents[0].shape[-1]
+    shape[-1] = numChannels
+    volume = np.zeros(shape, dtype=blockContents[0].dtype)
 
-    print("Have volume of shape {}".format(volume.shape))
+    print("Filling volume of shape {}".format(volume.shape))
 
     for block, data in zip(blocks, blockContents):
         blockStart = block.begin - start
         blockEnd = block.end - start
-
-        if dim == 2:
-            print("Inserting data into a subarray of shape {} from a {} block".format(volume[blockStart[0]:blockEnd[0], blockStart[1]:blockEnd[1], ...].shape, data.shape))
-            volume[blockStart[0]:blockEnd[0], blockStart[1]:blockEnd[1], ...] = data
-        elif dim == 3:
-            volume[blockStart[0]:blockEnd[0], blockStart[1]:blockEnd[1], blockStart[2]:blockEnd[2], ...] = data
+        # the last (channels) dim of start and end will be ignored, we just fill in all that we have
+        volume[blockStart[0]:blockEnd[0], blockStart[1]:blockEnd[1], blockStart[2]:blockEnd[2], blockStart[3]:blockEnd[3], ...] = data
 
     if roi is not None:
         print("Cropping volume of shape {} to roi from {} to {}".format(volume.shape, roi.begin, roi.end))
-        if dim == 2:
-            volume = volume[roi.begin[0]-start[0]:roi.end[0]-start[0], roi.begin[1]-start[1]:roi.end[1]-start[1], ...]
-        elif dim == 3:
-            volume = volume[roi.begin[0]-start[0]:roi.end[0]-start[0], roi.begin[1]-start[1]:roi.end[1]-start[1], roi.begin[2]-start[2]:roi.end[2]-start[2], ...]
+        volume = volume[roi.begin[0]-start[0]:roi.end[0]-start[0], roi.begin[1]-start[1]:roi.end[1]-start[1], roi.begin[2]-start[2]:roi.end[2]-start[2], roi.begin[3]-start[3]:roi.end[3]-start[3], ...]
 
     return volume
 
 def createRoi(start, stop):
-    ''' helper to create a 2D or 3D block '''
-    if dim == 2:
-        return pib.Block_2d(np.array(start), np.array(stop))
-    elif dim == 3:
-        return pib.Block_3d(np.array(start), np.array(stop))
+    ''' helper to create a 5D or 3D block '''
+    return pib.Block_5d(np.asarray(start), np.asarray(stop))
 
 # --------------------------------------------------------------
 class FinishedBlockCollectorThread(threading.Thread):
@@ -229,12 +222,14 @@ class FinishedBlockCollectorThread(threading.Thread):
 def get_raw_roi(format):
     '''
     Get the raw data of a roi in the specified format (raw / tiff / png /hdf5 ).
-    The roi is specified by appending "?extents_min=x_y_z&extents_max=x_y_z" to requested the URL.
+    The roi is specified by appending "?extents_min=t_x_y_z_c&extents_max=t_x_y_z_c" to requested the URL.
     '''
 
     start = list(map(int, request.args['extents_min'].split('_')))
     stop = list(map(int, request.args['extents_max'].split('_')))
     assert all(a < b for a,b in zip(start, stop)), "End point must be greater than start point"
+    assert len(start) == 5, "Expected 5D start coordinate"
+    assert len(stop) == 5, "Expected 5D stop coordinate"
     roi = createRoi(start, stop)
 
     blocksToProcess = getBlocksInRoi(start, stop)
@@ -258,6 +253,8 @@ def get_prediction_roi(format):
     start = list(map(int, request.args['extents_min'].split('_')))
     stop = list(map(int, request.args['extents_max'].split('_')))
     assert all(a < b for a,b in zip(start, stop)), "End point must be greater than start point"
+    assert len(start) == 5, "Expected 5D start coordinate"
+    assert len(stop) == 5, "Expected 5D stop coordinate"
     roi = createRoi(start, stop)
     blocksToProcess = getBlocksInRoi(start, stop)
     blockData = {}
@@ -345,8 +342,6 @@ if __name__ == '__main__':
                         help='ip and port of pixelclassification service')
     parser.add_argument('--dataprovider-ip', type=str, required=True, 
                         help='ip and port of dataprovider')
-    parser.add_argument('--blocksize', type=int, default=64, 
-                        help='size of blocks in all 2 or 3 dimensions, used to blockify all processing')
     parser.add_argument('--verbose', dest='verbose', action='store_true',
                         help='Turn on verbose logging', default=False)
 
@@ -371,29 +366,27 @@ if __name__ == '__main__':
     if r.status_code != 200:
         raise RuntimeError("Could not query dimensionaliy from dataprovider at ip: {}".format(options.dataprovider_ip))
     dim = int(r.text)
-    blockShape = [options.blocksize] * dim
 
     r = session.get('http://{ip}/info/shape'.format(ip=options.dataprovider_ip))
     if r.status_code != 200:
         raise RuntimeError("Could not query shape from dataprovider at ip: {}".format(options.dataprovider_ip))
     shape = list(map(int, r.text.split('_')))
+    assert len(shape) == 5, "Expected 5D data, but got shape {}".format(shape)
 
     r = session.get('http://{ip}/prediction/numclasses'.format(ip=options.pixelclassification_ip))
     if r.status_code != 200:
         raise RuntimeError("Could not query num classes from pixel classification at ip: {}".format(options.pixelclassification_ip))
     numClasses = int(r.text)
 
+    r = session.get('http://{ip}/prediction/blockshape'.format(ip=options.pixelclassification_ip))
+    if r.status_code != 200:
+        raise RuntimeError("Could not query blockshape from pixel classification at ip: {}".format(options.pixelclassification_ip))
+    blockShape = list(map(int, r.text.split('_')))
+    assert len(shape) == 5, "Expected 5D blocks, but got block shape {}".format(blockShape)
+    blocking = pib.Blocking_5d([0]*5, shape, blockShape)
+
     print("Found dataset of size {} and dimensionality {}".format(shape, dim))
     print("Using block shape {}".format(blockShape))
-
-    # configure pixelClassificationBackend
-    if dim == 2:
-        blocking = pib.Blocking_2d([0,0], shape, blockShape)
-    elif dim == 3:
-        blocking = pib.Blocking_3d([0,0,0], shape, blockShape)
-    else:
-        raise ValueError("Wrong data dimensionality, must be 2 or 3, got {}".format(dim))
-
     print("Dataset consists of {} blocks".format(blocking.numberOfBlocks))
 
     app.run(host='0.0.0.0', port=options.port, debug=False, threaded=True)

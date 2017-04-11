@@ -44,8 +44,8 @@ def getBlockRawData(blockIdx):
     assert 0 <= blockIdx < pixelClassificationBackend.blocking.numberOfBlocks, "Invalid blockIdx selected"
 
     roi = pixelClassificationBackend.getRequiredRawRoiForFeatureComputationOfBlock(blockIdx)
-    beginStr = '_'.join(map(str,roi.begin))
-    endStr = '_'.join(map(str, roi.end))
+    beginStr = '_'.join([str(s) for s in roi.begin])
+    endStr = '_'.join([str(s) for s in roi.end])
 
     r = session.get('http://{ip}/raw/raw/roi?extents_min={b}&extents_max={e}'.format(ip=options.dataprovider_ip, b=beginStr, e=endStr), stream=True)
     if r.status_code != 200:
@@ -61,16 +61,16 @@ def processBlock(blockIdx):
     Main computational method for processing blocks
     '''
     assert 0 <= blockIdx < pixelClassificationBackend.blocking.numberOfBlocks, "Invalid blockIdx selected"
-    rawData = getBlockRawData(blockIdx)
 
     cachedBlock, isDummy = cache.readBlock(blockIdx)
     if not isDummy and cachedBlock is not None:
         return cachedBlock
     
+    rawData = getBlockRawData(blockIdx)
     print("Input block {} min {} max {} dtype {} shape {}".format(blockIdx, rawData.min(), rawData.max(), rawData.dtype, rawData.shape))
     features = pixelClassificationBackend.computeFeaturesOfBlock(blockIdx, rawData)
     print("Feature block min {} max {} dtype {} shape {}".format(features.min(), features.max(), features.dtype, features.shape))
-    predictions = pixelClassificationBackend.computePredictionsOfBlock(blockIdx, features)
+    predictions = pixelClassificationBackend.computePredictionsOfBlock(features)
     print("Prediction block min {} max {} dtype {} shape {}".format(predictions.min(), predictions.max(), predictions.dtype, predictions.shape))
 
     cache.saveBlock(blockIdx, predictions)
@@ -78,11 +78,8 @@ def processBlock(blockIdx):
     return predictions
 
 def createRoi(start, stop):
-    ''' helper to create a 2D or 3D block '''
-    if dim == 2:
-        return pib.Block_2d(np.array(start), np.array(stop))
-    elif dim == 3:
-        return pib.Block_3d(np.array(start), np.array(stop))
+    ''' helper to create a 5D block '''
+    return pib.Block_5d(np.asarray(start), np.asarray(stop))
 
 # --------------------------------------------------------------
 # entry point for incoming messages via the task queue
@@ -110,6 +107,13 @@ def get_prediction(format, blockIdx):
 def get_prediction_num_classes():
     ''' Return the number of classes predicted by the currently loaded random forest '''
     return str(pixelClassificationBackend.numberOfClasses)
+
+# --------------------------------------------------------------
+@app.route('/prediction/blockshape')
+@doc.doc()
+def get_prediction_blockshape():
+    ''' Return the blockshape used for the dataset '''
+    return '_'.join([str(s) for s in pixelClassificationBackend.blocking.blockShape])
 
 # --------------------------------------------------------------
 @app.route('/prediction/cachedblockids')
@@ -167,12 +171,13 @@ if __name__ == '__main__':
     if r.status_code != 200:
         raise RuntimeError("Could not query dimensionaliy from dataprovider at ip: {}".format(options.dataprovider_ip))
     dim = int(r.text)
-    blockShape = [options.blocksize] * dim
+    assert dim in [2,3], "Individual frames must have dimension 2 or 3!"
 
     r = session.get('http://{ip}/info/shape'.format(ip=options.dataprovider_ip))
     if r.status_code != 200:
         raise RuntimeError("Could not query shape from dataprovider at ip: {}".format(options.dataprovider_ip))
     shape = list(map(int, r.text.split('_')))
+    assert len(shape) == 5, "Data Provider is not serving 5D data, cannot work with anything else."
 
     # read configuration from project file
     with h5py.File(options.project, 'r') as ilp:
@@ -195,7 +200,13 @@ if __name__ == '__main__':
     print("Found selected features:")
     pprint(selectedFeatureScalePairs)
     print("Found dataset of size {} and dimensionality {}".format(shape, dim))
+
+    # set up blocking
+    blockShape = [1]*5
+    blockShape[1:dim+1] = [options.blocksize] * dim
     print("Using block shape {}".format(blockShape))
+    blocking = pib.Blocking_5d([0]*5, shape, blockShape)
+    print("Dataset consists of {} blocks".format(blocking.numberOfBlocks))
 
     # configure pixelClassificationBackent
     # TODO: write a factory method for the constructor!
@@ -208,8 +219,6 @@ if __name__ == '__main__':
             pixelClassificationBackend = pib.PixelClassification_2d_float32()
         else:
             raise ValueError("Dataset has unsupported datatype {}".format(dtype))
-
-        blocking = pib.Blocking_2d([0,0], shape, blockShape)
     elif dim == 3:
         if dtype == 'uint8':
             pixelClassificationBackend = pib.PixelClassification_3d_uint8()
@@ -219,12 +228,8 @@ if __name__ == '__main__':
             pixelClassificationBackend = pib.PixelClassification_3d_float32()
         else:
             raise ValueError("Dataset has unsupported datatype {}".format(dtype))
-
-        blocking = pib.Blocking_3d([0,0,0], shape, blockShape)
     else:
         raise ValueError("Wrong data dimensionality, must be 2 or 3, got {}".format(dim))
-
-    print("Dataset consists of {} blocks".format(blocking.numberOfBlocks))
 
     pixelClassificationBackend.configureDatasetSize(blocking)
     pixelClassificationBackend.configureSelectedFeatures(selectedFeatureScalePairs)
