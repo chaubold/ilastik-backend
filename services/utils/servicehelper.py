@@ -118,3 +118,84 @@ def returnDataInFormat(data, format):
             f.create_dataset('exported_data', data=data)
         # TODO: delete file?
         return send_file(fname)
+
+def adjustVolumeAxisOrder(volume, inputAxes, outputAxes='txyzc'):
+    """
+    This method allows to convert a given `volume` (with given `inputAxes` ordering)
+    into a different axis ordering, specified as `outputAxes` string (e.g. "xyzt").
+
+    Allowed axes are `t`, `x`, `y`, `z`, `c`.
+
+    The default format volumes are converted to is "txyzc", axes that are missing in the input
+    volume are created with size 1.
+    """
+    assert(isinstance(volume, np.ndarray))
+    assert(len(volume.shape) == len(inputAxes))
+    assert(len(outputAxes) >= len(inputAxes))
+    assert(not any(a not in 'txyzc' for a in outputAxes))
+    assert(not any(a not in 'txyzc' for a in inputAxes))
+
+    outVolume = volume
+
+    # find present and missing axes
+    positions = {}
+    missingAxes = []
+    for axis in outputAxes:
+        try:
+            positions[axis] = inputAxes.index(axis)
+        except ValueError:
+            missingAxes.append(axis)
+
+    # insert missing axes at the end
+    for m in missingAxes:
+        outVolume = np.expand_dims(outVolume, axis=-1)
+        positions[m] = outVolume.ndim - 1
+
+    # transpose
+    axesRemapping = [positions[a] for a in outputAxes]
+    outVolume = np.transpose(outVolume, axes=axesRemapping)
+
+    return outVolume
+
+def adjustCoordinateAxesOrder(coord, inputAxes, outputAxes='txyzc', allowAxisDrop=True):
+    """
+    This method allows to convert a given `coord` inside a volume with the given `inputAxes`
+    into a different axis ordering, specified as `outputAxes` string (e.g. "xyzt").
+
+    Allowed axes are `t`, `x`, `y`, `z`, `c`.
+
+    The default format volumes are converted to is "txyzc", axes that are missing in the input
+    volume are created with size 1. Axes that are missing in the output order but are present in the input
+    are only allowed to have values 0 or 1 because these are the values one would use to access this singleton axis.
+    """
+    assert(len(coord) == len(inputAxes))
+    if not allowAxisDrop:
+        assert len(outputAxes) >= len(inputAxes), "Cannot drop axes during conversion"
+    else:
+        for idx, a in enumerate(inputAxes):
+            if a not in outputAxes:
+                assert 0 <= coord[idx] <= 1, "Cannot drop axes that have a value different from 0 or 1"
+    assert(not any(a not in 'txyzc' for a in outputAxes))
+    assert(not any(a not in 'txyzc' for a in inputAxes))
+
+    outCoord = list(coord)
+
+    # find present and missing axes
+    positions = {}
+    missingAxes = []
+    for axis in outputAxes:
+        try:
+            positions[axis] = inputAxes.index(axis)
+        except ValueError:
+            missingAxes.append(axis)
+
+    # insert missing axes at the end
+    for m in missingAxes:
+        outCoord.append(1)
+        positions[m] = len(outCoord) - 1
+
+    # transpose
+    axesRemapping = [positions[a] for a in outputAxes]
+    outCoord = np.asarray(outCoord)[axesRemapping]
+
+    return outCoord
