@@ -1,4 +1,5 @@
 import pika
+import time
 import logging
 import threading
 logger = logging.getLogger(__name__)
@@ -77,6 +78,73 @@ class FinishedQueueSubscription(threading.Thread):
         with self._callbacksLock:
             if cbId in self._callbacks:
                 del self._callbacks[cbId]
+
+# --------------------------------------------------------------
+class FinishedBlockCollectorThread(threading.Thread):
+    '''
+    Little helper thread that waits for all required blocks to be available.
+    The thread finishes if all blocks have been found.
+    '''
+    def __init__(self, blocksToProcess, finishedQueueSubscription, cache):
+        super(FinishedBlockCollectorThread, self).__init__()
+        self._requiredBlocks = set(blocksToProcess)
+        logger.debug("Waiting for blocks {}".format(self._requiredBlocks))
+        self._requiredBlocksLock = threading.Lock()
+        self.collectedBlocks = {} # dict with key=blockId, value=np.array of data
+        self._availableBlocks = []
+        self._availableBlocksLock = threading.Lock()
+        self._finishedQueueSubscription = finishedQueueSubscription
+        self._cache = cache
+
+        # create a callback that appends found blocks to the availableBlocks list
+        def finishedBlockCallback(blockId):
+            isRequired = False
+            with self._requiredBlocksLock:
+                if blockId in self._requiredBlocks:
+                    isRequired = True
+                    self._requiredBlocks.remove(blockId)
+            if isRequired:
+                logger.debug("got finished message for required block {}".format(blockId))
+                with self._availableBlocksLock:
+                    self._availableBlocks.append(blockId)
+
+        # on finished block messages, call the callback!
+        self._callbackId = self._finishedQueueSubscription.registerCallback(finishedBlockCallback)
+
+    def run(self):
+        keepAlive = True
+        while keepAlive:
+            time.sleep(0.05)
+
+            with self._availableBlocksLock:
+                tempAvailableIds = self._availableBlocks[:] # copy!
+                self._availableBlocks = []
+
+            for b in tempAvailableIds:
+                blockData, isDummy = self._cache.readBlock(b)
+                assert not isDummy and blockData is not None, "Received Block finished message but it was not available in cache!"
+                logger.debug("Fetching available block {}".format(b))
+                self.collectedBlocks[b] = blockData
+
+            # quit if all blocks are found
+            with self._requiredBlocksLock:
+                with self._availableBlocksLock:
+                    if len(self._requiredBlocks) == 0 and len(self._availableBlocks) == 0:
+                        keepAlive = False
+        self._shutdown()
+                    
+
+    def _shutdown(self):
+        logger.debug("Received all required blocks, shutting down FinishedBlockCollectorThread")
+        ''' called from run() before the thread exits, stop retrieving block callbacks '''
+        self._finishedQueueSubscription.removeCallback(self._callbackId)
+
+    def removeBlockRequirements(self, blocks):
+        ''' remove the given blocks from the list of blocks we are waiting for '''
+        with self._requiredBlocksLock:
+            for b in blocks:
+                self._requiredBlocks.remove(b)
+        logger.debug("Found blocks {} already, only {} remaining".format(blocks, self._requiredBlocks))
 
 # --------------------------------------------------------------
 

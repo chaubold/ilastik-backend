@@ -15,8 +15,8 @@ from flask_autodoc import Autodoc
 
 # C++ module containing all the important methods
 import pyilastikbackend as pib
-from utils.servicehelper import returnDataInFormat, RedisCache
-from utils.queues import FinishedQueueSubscription, TaskQueuePublisher
+from utils.servicehelper import returnDataInFormat, RedisCache, getBlockRawData, getBlocksInRoi, combineBlocksToVolume, collectPredictionBlocksForRoi, createRoi
+from utils.queues import FinishedQueueSubscription, TaskQueuePublisher, FinishedBlockCollectorThread
 from utils.voxels_nddata_codec import VoxelsNddataCodec
 
 # logging
@@ -39,181 +39,6 @@ session = requests.Session() # to allow connection pooling
 # --------------------------------------------------------------
 # Helper methods
 # --------------------------------------------------------------
-def getBlockRawData(blockIdx):
-    '''
-    Get the raw data of a block
-    '''
-    assert 0 <= blockIdx < blocking.numberOfBlocks, "Invalid blockIdx selected"
-
-    roi = blocking.getBlock(blockIdx)
-    beginStr = '_'.join(map(str,roi.begin))
-    endStr = '_'.join(map(str, roi.end))
-
-    r = session.get('http://{ip}/raw/raw/roi?extents_min={b}&extents_max={e}'.format(ip=options.dataprovider_ip, b=beginStr, e=endStr), stream=True)
-    if r.status_code != 200:
-        raise RuntimeError("Could not get raw data of block {b} from {ip}".format(b=blockIdx, ip=options.dataprovider_ip))
-    shape = roi.shape
-    codec = VoxelsNddataCodec(rawDtype)
-    rawData = codec.decode_to_ndarray(r.raw, shape)
-
-    return rawData
-
-def getBlockPrediction(blockIdx):
-    '''
-    Get the prediction of a block
-    '''
-    assert 0 <= blockIdx < blocking.numberOfBlocks, "Invalid blockIdx selected"
-    roi = blocking.getBlock(blockIdx)
-
-    r = session.get('http://{ip}/prediction/raw/{b}'.format(ip=options.pixelclassification_ip, b=blockIdx), stream=True)
-    if r.status_code != 200:
-        raise RuntimeError("Could not get prediction of block {b} from {ip}".format(b=blockIdx, ip=options.pixelclassification_ip))
-    
-    shape = roi.shape
-    shape[-1] = numClasses
-
-    codec = VoxelsNddataCodec('float32')
-    rawData = codec.decode_to_ndarray(r.raw, shape)
-
-    return rawData
-
-def getBlocksInRoi(start, stop):
-    '''
-    Compute the list of blocks that need to be processed to serve the requested ROI
-    '''
-    startIdx = blocking.getSurroundingBlockIndex(start)
-    startBlock = blocking.getBlock(startIdx)
-
-    stop = np.asarray(stop) - 1 # stop is exclusive but the "surroundingBlockIndex" check works inclusive
-    stopIdx = blocking.getSurroundingBlockIndex(stop)
-    stopBlock = blocking.getBlock(stopIdx)
-
-    shape = stopBlock.end - startBlock.begin
-    blocksPerDim = np.floor(shape / blocking.blockShape)
-
-    blockIds = []
-    coord = np.zeros_like(start)
-    for t in range(int(blocksPerDim[0])):
-        coord[0] = startBlock.begin[0] + blocking.blockShape[0] * t
-        for x in range(int(blocksPerDim[1])):
-            coord[1] = startBlock.begin[1] + blocking.blockShape[1] * x
-            for y in range(int(blocksPerDim[2])):
-                coord[2] = startBlock.begin[2] + blocking.blockShape[2] * y
-                if dim == 3:
-                    for z in range(int(blocksPerDim[3])):
-                        coord[3] = startBlock.begin[3] + blocking.blockShape[3] * z
-                        blockIds.append(blocking.getSurroundingBlockIndex(coord))
-                else:
-                    blockIds.append(blocking.getSurroundingBlockIndex(coord))
-
-    print("Range {}-{} is covered by blocks: {}".format(start, stop+1, blockIds))
-
-    return blockIds
-
-def combineBlocksToVolume(blockIds, blockContents, roi=None):
-    '''
-    Stitch blocks into one 5D numpy volume, which will have the size of the 
-    smallest bounding box containing all specified blocks or the size of the provided roi (which should have .begin, .end, and .shape).
-    The number of channels (last axis) will be adjusted to match the block contents
-    '''
-    assert len(blockIds) == len(blockContents), "Must provide the same number of block indices and contents"
-    assert len(blockContents) > 0, "Cannot combine zero blocks"
-    blocks = [blocking.getBlock(b) for b in blockIds]
-    start = np.min([b.begin for b in blocks],axis=0)
-    stop = np.max([b.end for b in blocks],axis=0)
-    print("Got blocks covering {} to {}".format(start, stop))
-    shape = stop - start
-
-    if roi is not None:
-        assert all(start <= roi.begin), "Provided blocks do not start at roi beginning"
-        assert all(roi.end <= stop), "Provided blocks end at {} before roi end {}".format(stop, roi.end)
-
-    numChannels = blockContents[0].shape[-1]
-    shape[-1] = numChannels
-    volume = np.zeros(shape, dtype=blockContents[0].dtype)
-
-    print("Filling volume of shape {}".format(volume.shape))
-
-    for block, data in zip(blocks, blockContents):
-        blockStart = block.begin - start
-        blockEnd = block.end - start
-        # the last (channels) dim of start and end will be ignored, we just fill in all that we have
-        volume[blockStart[0]:blockEnd[0], blockStart[1]:blockEnd[1], blockStart[2]:blockEnd[2], blockStart[3]:blockEnd[3], ...] = data
-
-    if roi is not None:
-        print("Cropping volume of shape {} to roi from {} to {}".format(volume.shape, roi.begin, roi.end))
-        volume = volume[roi.begin[0]-start[0]:roi.end[0]-start[0], roi.begin[1]-start[1]:roi.end[1]-start[1], roi.begin[2]-start[2]:roi.end[2]-start[2], roi.begin[3]-start[3]:roi.end[3]-start[3], ...]
-
-    return volume
-
-def createRoi(start, stop):
-    ''' helper to create a 5D or 3D block '''
-    return pib.Block_5d(np.asarray(start), np.asarray(stop))
-
-# --------------------------------------------------------------
-class FinishedBlockCollectorThread(threading.Thread):
-    '''
-    Little helper thread that waits for all required blocks to be available.
-    The thread finishes if all blocks have been found.
-    '''
-    def __init__(self, blocksToProcess):
-        super(FinishedBlockCollectorThread, self).__init__()
-        self._requiredBlocks = set(blocksToProcess)
-        logger.debug("Waiting for blocks {}".format(self._requiredBlocks))
-        self._requiredBlocksLock = threading.Lock()
-        self.collectedBlocks = {} # dict with key=blockId, value=np.array of data
-        self._availableBlocks = []
-        self._availableBlocksLock = threading.Lock()
-
-        # create a callback that appends found blocks to the availableBlocks list
-        def finishedBlockCallback(blockId):
-            isRequired = False
-            with self._requiredBlocksLock:
-                if blockId in self._requiredBlocks:
-                    isRequired = True
-                    self._requiredBlocks.remove(blockId)
-            if isRequired:
-                logger.debug("got finished message for required block {}".format(blockId))
-                with self._availableBlocksLock:
-                    self._availableBlocks.append(blockId)
-
-        # on finished block messages, call the callback!
-        self._callbackId = finishedQueueSubscription.registerCallback(finishedBlockCallback)
-
-    def run(self):
-        keepAlive = True
-        while keepAlive:
-            time.sleep(0.05)
-
-            with self._availableBlocksLock:
-                tempAvailableIds = self._availableBlocks[:] # copy!
-                self._availableBlocks = []
-
-            for b in tempAvailableIds:
-                blockData, isDummy = cache.readBlock(b)
-                assert not isDummy and blockData is not None, "Received Block finished message but it was not available in cache!"
-                logger.debug("Fetching available block {}".format(b))
-                self.collectedBlocks[b] = blockData
-
-            # quit if all blocks are found
-            with self._requiredBlocksLock:
-                with self._availableBlocksLock:
-                    if len(self._requiredBlocks) == 0 and len(self._availableBlocks) == 0:
-                        keepAlive = False
-        self._shutdown()
-                    
-
-    def _shutdown(self):
-        logger.debug("Received all required blocks, shutting down FinishedBlockCollectorThread")
-        ''' called from run() before the thread exits, stop retrieving block callbacks '''
-        finishedQueueSubscription.removeCallback(self._callbackId)
-
-    def removeBlockRequirements(self, blocks):
-        ''' remove the given blocks from the list of blocks we are waiting for '''
-        with self._requiredBlocksLock:
-            for b in blocks:
-                self._requiredBlocks.remove(b)
-        logger.debug("Found blocks {} already, only {} remaining".format(blocks, self._requiredBlocks))
 
 # --------------------------------------------------------------
 # REST Api
@@ -233,10 +58,17 @@ def get_raw_roi(format):
     assert len(stop) == 5, "Expected 5D stop coordinate"
     roi = createRoi(start, stop)
 
-    blocksToProcess = getBlocksInRoi(start, stop)
+    blocksToProcess = getBlocksInRoi(blocking, start, stop, dim)
+
+    # Serial version:
     # blockData = [getBlockRawData(b) for b in blocksToProcess]
-    blockData = list(executor.map(getBlockRawData, blocksToProcess))
-    data = combineBlocksToVolume(blocksToProcess, blockData, roi)
+
+    # Using ThreadPoolExecutor:
+    def partialGetBlockRawData(blockIdx):
+        return getBlockRawData(blockIdx, rawDtype, blocking, options.dataprovider_ip, session)
+
+    blockData = list(executor.map(partialGetBlockRawData, blocksToProcess))
+    data = combineBlocksToVolume(blocksToProcess, blockData, blocking, roi)
 
     return returnDataInFormat(data, format)
 
@@ -256,45 +88,8 @@ def get_prediction_roi(format):
     assert all(a < b for a,b in zip(start, stop)), "End point must be greater than start point"
     assert len(start) == 5, "Expected 5D start coordinate"
     assert len(stop) == 5, "Expected 5D stop coordinate"
-    roi = createRoi(start, stop)
-    blocksToProcess = getBlocksInRoi(start, stop)
-    blockData = {}
-
-    # start listening for finishing blocks right here 
-    # because some might finish (blocksInFlight) between the time when we check the cache for this block and 
-    # before we'd start listening after looping over all required blocks
-    finishedBlockCollector = FinishedBlockCollectorThread(blocksToProcess)
-    finishedBlockCollector.start()
-
-    # try to get blocks from cache. If they are not there yet, emplace dummy block so others will not
-    # request the computation again
-    missingBlocks = []
-    blocksInFlight = []
-    for b in blocksToProcess:
-        block, foundDummy = cache.readBlock(b, insertDummyIfNotFound=True)
-        if foundDummy:
-            blocksInFlight.append(b)
-        else:
-            if block is None:
-                missingBlocks.append(b)
-            else:
-                blockData[b] = block
-
-    # enqueue tasks to compute missing blocks
-    finishedBlockCollector.removeBlockRequirements(list(blockData.keys()))
-    for b in missingBlocks:
-        taskQueuePublisher.enqueue(b)
-
-    # wait for all missing blocks to be found
-    finishedBlockCollector.join()
-    logger.debug("All blocks needed by request were retrieved!")
-    blockData.update(finishedBlockCollector.collectedBlocks)
-
-    # blockData = list(executor.map(getBlockPrediction, blocksToProcess))
-    # blockData = [getBlockPrediction(b) for b in blocksToProcess]
-
-    blockDataList = [blockData[b] for b in blocksToProcess]
-    data = combineBlocksToVolume(blocksToProcess, blockDataList, roi)
+    
+    data = collectPredictionBlocksForRoi(blocking, start, stop, dim, cache, finishedQueueSubscription, taskQueuePublisher)
 
     return returnDataInFormat(data, format)
 

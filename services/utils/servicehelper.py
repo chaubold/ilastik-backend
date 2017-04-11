@@ -5,8 +5,13 @@ from flask import Flask, send_file, request
 from utils.voxels_nddata_codec import VoxelsNddataCodec
 import redis
 import logging
+import pyilastikbackend as pib
+from utils.queues import  FinishedBlockCollectorThread
 logger = logging.getLogger(__name__)
 
+# --------------------------------------------------------------
+# Block Cache
+# --------------------------------------------------------------
 class Cache(object):
     ''' Cache dummy that always returns None on a cache access '''
     def __init__(self):
@@ -97,6 +102,9 @@ class RedisCache(Cache):
         for k in self._redisClient.scan_iter(match='prediction-*'):
             self._redisClient.delete(k)
 
+# --------------------------------------------------------------
+# Helper methods
+# --------------------------------------------------------------
 def returnDataInFormat(data, format):
     '''
     Handle sending the requested data back in the specified format
@@ -199,3 +207,157 @@ def adjustCoordinateAxesOrder(coord, inputAxes, outputAxes='txyzc', allowAxisDro
     outCoord = np.asarray(outCoord)[axesRemapping]
 
     return outCoord
+
+def getBlockRawData(blockIdx, dtype, blocking, dataprovider_ip, session):
+    '''
+    Get the raw data of a block
+    '''
+    assert 0 <= blockIdx < blocking.numberOfBlocks, "Invalid blockIdx selected"
+
+    roi = blocking.getBlock(blockIdx)
+    beginStr = '_'.join(map(str,roi.begin))
+    endStr = '_'.join(map(str, roi.end))
+
+    r = session.get('http://{ip}/raw/raw/roi?extents_min={b}&extents_max={e}'.format(ip=dataprovider_ip, b=beginStr, e=endStr), stream=True)
+    if r.status_code != 200:
+        raise RuntimeError("Could not get raw data of block {b} from {ip}".format(b=blockIdx, ip=dataprovider_ip))
+    shape = roi.shape
+    codec = VoxelsNddataCodec(dtype)
+    rawData = codec.decode_to_ndarray(r.raw, shape)
+
+    return rawData
+
+def getBlockPrediction(blockIdx, blocking, pixelclassification_ip, session):
+    '''
+    Get the prediction of a block
+    '''
+    assert 0 <= blockIdx < blocking.numberOfBlocks, "Invalid blockIdx selected"
+    roi = blocking.getBlock(blockIdx)
+
+    r = session.get('http://{ip}/prediction/numclasses'.format(ip=pixelclassification_ip))
+    if r.status_code != 200:
+        raise RuntimeError("Could not query num classes from pixel classification at ip: {}".format(pixelclassification_ip))
+    numClasses = int(r.text)
+
+    r = session.get('http://{ip}/prediction/raw/{b}'.format(ip=pixelclassification_ip, b=blockIdx), stream=True)
+    if r.status_code != 200:
+        raise RuntimeError("Could not get prediction of block {b} from {ip}".format(b=blockIdx, ip=pixelclassification_ip))
+    
+    shape = roi.shape
+    shape[-1] = numClasses
+
+    codec = VoxelsNddataCodec('float32')
+    rawData = codec.decode_to_ndarray(r.raw, shape)
+
+    return rawData
+
+def getBlocksInRoi(blocking, start, stop, dim):
+    '''
+    Compute the list of blocks that need to be processed to serve the requested ROI
+    '''
+    startIdx = blocking.getSurroundingBlockIndex(start)
+    startBlock = blocking.getBlock(startIdx)
+
+    stop = np.asarray(stop) - 1 # stop is exclusive but the "surroundingBlockIndex" check works inclusive
+    stopIdx = blocking.getSurroundingBlockIndex(stop)
+    stopBlock = blocking.getBlock(stopIdx)
+
+    shape = stopBlock.end - startBlock.begin
+    blocksPerDim = np.ceil(shape / blocking.blockShape)
+
+    blockIds = []
+    coord = np.zeros_like(start)
+    for t in range(int(blocksPerDim[0])):
+        coord[0] = startBlock.begin[0] + blocking.blockShape[0] * t
+        for x in range(int(blocksPerDim[1])):
+            coord[1] = startBlock.begin[1] + blocking.blockShape[1] * x
+            for y in range(int(blocksPerDim[2])):
+                coord[2] = startBlock.begin[2] + blocking.blockShape[2] * y
+                if dim == 3:
+                    for z in range(int(blocksPerDim[3])):
+                        coord[3] = startBlock.begin[3] + blocking.blockShape[3] * z
+                        blockIds.append(blocking.getSurroundingBlockIndex(coord))
+                else:
+                    blockIds.append(blocking.getSurroundingBlockIndex(coord))
+
+    print("Range {}-{} is covered by blocks: {}".format(start, stop+1, blockIds))
+
+    return blockIds
+
+def combineBlocksToVolume(blockIds, blockContents, blocking, roi=None):
+    '''
+    Stitch blocks into one 5D numpy volume, which will have the size of the 
+    smallest bounding box containing all specified blocks or the size of the provided roi (which should have .begin, .end, and .shape).
+    The number of channels (last axis) will be adjusted to match the block contents
+    '''
+    assert len(blockIds) == len(blockContents), "Must provide the same number of block indices and contents"
+    assert len(blockContents) > 0, "Cannot combine zero blocks"
+    blocks = [blocking.getBlock(b) for b in blockIds]
+    start = np.min([b.begin for b in blocks],axis=0)
+    stop = np.max([b.end for b in blocks],axis=0)
+    print("Got blocks covering {} to {}".format(start, stop))
+    shape = stop - start
+
+    if roi is not None:
+        assert all(start <= roi.begin), "Provided blocks do not start at roi beginning"
+        assert all(roi.end <= stop), "Provided blocks end at {} before roi end {}".format(stop, roi.end)
+
+    numChannels = blockContents[0].shape[-1]
+    shape[-1] = numChannels
+    volume = np.zeros(shape, dtype=blockContents[0].dtype)
+
+    print("Filling volume of shape {}".format(volume.shape))
+
+    for block, data in zip(blocks, blockContents):
+        blockStart = block.begin - start
+        blockEnd = block.end - start
+        # the last (channels) dim of start and end will be ignored, we just fill in all that we have
+        volume[blockStart[0]:blockEnd[0], blockStart[1]:blockEnd[1], blockStart[2]:blockEnd[2], blockStart[3]:blockEnd[3], ...] = data
+
+    if roi is not None:
+        print("Cropping volume of shape {} to roi from {} to {}".format(volume.shape, roi.begin, roi.end))
+        volume = volume[roi.begin[0]-start[0]:roi.end[0]-start[0], roi.begin[1]-start[1]:roi.end[1]-start[1], roi.begin[2]-start[2]:roi.end[2]-start[2], roi.begin[3]-start[3]:roi.end[3]-start[3], ...]
+
+    return volume
+
+def createRoi(start, stop):
+    ''' helper to create a 5D or 3D block '''
+    return pib.Block_5d(np.asarray(start), np.asarray(stop))
+
+def collectPredictionBlocksForRoi(blocking, start, stop, dim, cache, finishedQueueSubscription, taskQueuePublisher):
+    roi = createRoi(start, stop)
+    blocksToProcess = getBlocksInRoi(blocking, start, stop, dim)
+    blockData = {}
+
+    # start listening for finishing blocks right here 
+    # because some might finish (blocksInFlight) between the time when we check the cache for this block and 
+    # before we'd start listening after looping over all required blocks
+    finishedBlockCollector = FinishedBlockCollectorThread(blocksToProcess, finishedQueueSubscription, cache)
+    finishedBlockCollector.start()
+
+    # try to get blocks from cache. If they are not there yet, emplace dummy block so others will not
+    # request the computation again
+    missingBlocks = []
+    blocksInFlight = []
+    for b in blocksToProcess:
+        block, foundDummy = cache.readBlock(b, insertDummyIfNotFound=True)
+        if foundDummy:
+            blocksInFlight.append(b)
+        else:
+            if block is None:
+                missingBlocks.append(b)
+            else:
+                blockData[b] = block
+
+    # enqueue tasks to compute missing blocks
+    finishedBlockCollector.removeBlockRequirements(list(blockData.keys()))
+    for b in missingBlocks:
+        taskQueuePublisher.enqueue(b)
+
+    # wait for all missing blocks to be found
+    finishedBlockCollector.join()
+    logger.debug("All blocks needed by request were retrieved!")
+    blockData.update(finishedBlockCollector.collectedBlocks)
+
+    blockDataList = [blockData[b] for b in blocksToProcess]
+    return combineBlocksToVolume(blocksToProcess, blockDataList, blocking, roi)
