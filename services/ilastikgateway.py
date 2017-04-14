@@ -79,7 +79,7 @@ def get_raw_roi(format):
 def get_prediction_roi(format):
     '''
     Get a predicted roi in the specified format (raw / tiff / png / hdf5).
-    The roi is specified by appending "?extents_min=x_y_z&extents_max=x_y_z" to requested the URL.
+    The roi is specified by appending "?extents_min=t_x_y_z_c&extents_max=t_x_y_z_c" to requested the URL.
     '''
 
     # get blocks in ROI
@@ -94,12 +94,39 @@ def get_prediction_roi(format):
     return returnDataInFormat(data, format)
 
 # --------------------------------------------------------------
+@app.route('/labelimage/<format>/roi')
+@doc.doc()
+def get_labelimage_roi(format):
+    '''
+    Get the thresholded labelimage of exactly one time frame in the specified format (raw / tiff / png / hdf5).
+    The roi must be specified by appending "?extents_min=t_x_y_z_c&extents_max=t_x_y_z_c" to requested the URL.
+    '''
+
+    # get blocks in ROI
+    start = list(map(int, request.args['extents_min'].split('_')))
+    stop = list(map(int, request.args['extents_max'].split('_')))
+    assert all(a < b for a,b in zip(start, stop)), "End point must be greater than start point"
+    assert len(start) == 5, "Expected 5D start coordinate"
+    assert len(stop) == 5, "Expected 5D stop coordinate"
+    assert stop[0] - start[0] == 1, "Can only serve single time frames"
+
+    frame = start[0]
+    r = session.get('http://{ip}/labelvolume/raw/{frame}'.format(ip=options.thresholding_ip, frame=frame), stream=True)
+    if r.status_code != 200:
+        raise RuntimeError("Could not get labelimage of frame {f} from {ip}".format(f=frame, ip=options.thresholding_ip))
+
+    codec = VoxelsNddataCodec(np.uint32)
+    frame_shape = [1] + shape[1:4] + [1]
+    labelImage = codec.decode_to_ndarray(r.raw, frame_shape)
+
+    return returnDataInFormat(labelImage[:, start[1]:stop[1], start[2]:stop[2], start[3]:stop[3], :], format)
+
+# --------------------------------------------------------------
 @app.route('/prediction/info/numclasses')
 @doc.doc()
 def get_prediction_num_classes():
     ''' Return the number of classes predicted by the currently loaded random forest '''
     return str(numClasses)
-
 
 # --------------------------------------------------------------
 @app.route('/raw/info/dtype')
@@ -138,6 +165,8 @@ if __name__ == '__main__':
                         help='ip and port of pixelclassification service')
     parser.add_argument('--dataprovider-ip', type=str, required=True, 
                         help='ip and port of dataprovider')
+    parser.add_argument('--thresholding-ip', type=str, required=True, 
+                        help='ip and port of thresholding service')
     parser.add_argument('--verbose', dest='verbose', action='store_true',
                         help='Turn on verbose logging', default=False)
 
