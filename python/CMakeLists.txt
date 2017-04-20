@@ -6,7 +6,7 @@ target_link_libraries(pyilastikbackend ilastikbackend)
 # make use of ${PYTHON_EXECUTABLE} instead of /usr/bin/python
 if(NOT DEFINED PYILASTIKBACKEND_INSTALL_DIR OR PYILASTIKBACKEND_INSTALL_DIR MATCHES "^$")
     execute_process(COMMAND ${PYTHON_EXECUTABLE} -c
-                    "from distutils.sysconfig import *; print get_python_lib(1)"
+                    "from distutils.sysconfig import *; print(get_python_lib(1))"
                     OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
     file(TO_CMAKE_PATH ${PYTHON_SITE_PACKAGES} PYILASTIKBACKEND_INSTALL_DIR)
 endif()
