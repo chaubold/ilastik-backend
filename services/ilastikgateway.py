@@ -41,9 +41,8 @@ numClasses = None
 blocking = None
 blockShape = None
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
-finishedQueueSubscription = FinishedQueueSubscription()
-finishedQueueSubscription.start()
-taskQueuePublisher = TaskQueuePublisher()
+finishedQueueSubscription = None
+taskQueuePublisher = None
 session = requests.Session() # to allow connection pooling
 thresholding_ip = None
 dataprovider_ip = None
@@ -125,7 +124,7 @@ def isConfigured():
 @atexit.register
 def shutdown():
     logger.info("Deregistering Gateway from registry")
-    registry.remove(registry.GATEWAY_IP, '')
+    registry.set(registry.GATEWAY_IP, '')
 
 # --------------------------------------------------------------
 # REST Api
@@ -279,7 +278,12 @@ if __name__ == '__main__':
     # set up registry connection and query values
     registry = Registry(options.registry_ip)
     cache_ip = registry.get(registry.CACHE_IP)
+    message_broker_ip = registry.get(registry.MESSAGE_BROKER_IP)
     cache = RedisCache(cache_ip)
+
+    finishedQueueSubscription = FinishedQueueSubscription(host=message_broker_ip)
+    finishedQueueSubscription.start()
+    taskQueuePublisher = TaskQueuePublisher(host=message_broker_ip)
 
     # register the gateway in the registry
     registry.set(registry.GATEWAY_IP, '{}:{}'.format(getOwnPublicIp(), options.port))
