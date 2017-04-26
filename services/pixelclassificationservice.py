@@ -23,13 +23,14 @@ from utils.servicehelper import returnDataInFormat, RedisCache, getOwnPublicIp
 from utils.voxels_nddata_codec import VoxelsNddataCodec
 from utils.queues import TaskQueueSubscription, FinishedQueuePublisher
 from utils.registry import Registry
+from utils.redisloghandler import RedisLogHandler
 
 # flask setup
 app = Flask("pixelclassificationservice")
 doc = Autodoc(app)
-logger = logging.getLogger(__name__)
 
 # global variable storing the backend instance and the redis client
+logger = logging.getLogger(__name__)
 registry = None
 dataprovider_ip = None
 pixelClassificationBackend = None
@@ -273,6 +274,10 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
+
+    logHandler = RedisLogHandler(options.registry_ip, 6380, Registry.LOG, ip='{}@{}:{}'.format(app.name, getOwnPublicIp(), options.port))
+    logHandler.setLevel(level=logging.DEBUG)
+    logging.getLogger().addHandler(logHandler)
 
     # set up registry connection and query values
     registry = Registry(options.registry_ip)

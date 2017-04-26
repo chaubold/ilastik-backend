@@ -374,7 +374,12 @@ def getOwnPublicIp():
             import subprocess
             ip = subprocess.check_output(['curl', 'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip', '-H', 'Metadata-Flavor: Google'])
         except subprocess.CalledProcessError:
-            # last resort, use hostname
-            import socket
-            ip = socket.gethostbyname(socket.gethostname())
+            try:
+                # in normal environments use hostname
+                import socket
+                ip = socket.gethostbyname(socket.gethostname())
+            except:
+                # nothing works (e.g. in eduroam), assume we're running local
+                logger.warn("Was not able to determine own IP, assuming we run locally and using IP 0.0.0.0")
+                return '0.0.0.0'
     return ip

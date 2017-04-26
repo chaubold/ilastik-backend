@@ -20,6 +20,7 @@ from utils.servicehelper import returnDataInFormat, RedisCache, getBlockRawData,
 from utils.queues import FinishedQueueSubscription, TaskQueuePublisher, FinishedBlockCollectorThread
 from utils.voxels_nddata_codec import VoxelsNddataCodec
 from utils.registry import Registry
+from utils.redisloghandler import RedisLogHandler
 
 # logging
 import logging
@@ -270,6 +271,10 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
+
+    logHandler = RedisLogHandler(options.registry_ip, 6380, Registry.LOG, ip='{}@{}:{}'.format(app.name, getOwnPublicIp(), options.port))
+    logHandler.setLevel(level=logging.DEBUG)
+    logging.getLogger().addHandler(logHandler)
 
     # set up registry connection and query values
     registry = Registry(options.registry_ip)

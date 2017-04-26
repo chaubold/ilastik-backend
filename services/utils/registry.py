@@ -30,6 +30,7 @@ class Registry(object):
     THRESHOLD_CHANNEL = "THRESHOLD_CHANNEL"
     THREDHOLD_SIGMAS = "THREDHOLD_SIGMAS"
     BLOCKSIZE = "BLOCKSIZE"
+    LOG = "LOG"
 
     allowedKeys = {
         DATA_PROVIDER_IP: "The IP:port at which the dataprovider is running. Usually outside of the ilastik machine 'network'",
@@ -43,7 +44,8 @@ class Registry(object):
         THRESHOLD_VALUE: "Thresholding value at which probability a pixel counts as foreground",
         THRESHOLD_CHANNEL: "Which channel of the probabilities to use for thresholding",
         THREDHOLD_SIGMAS: "String in x_y_z format of smoothing sigmas to apply on the probabilities before thresholding. Use zeros or negative values to disable smoothing.",
-        BLOCKSIZE: "String in x_y_z format of the block size to use for the dataset"
+        BLOCKSIZE: "String in x_y_z format of the block size to use for the dataset",
+        LOG: "list which contains the ilastik logs"
     }
 
     def __init__(self, host, port=6380):
@@ -78,7 +80,7 @@ class Registry(object):
         Lists are automatically appended.
         '''
         key = str(key).upper()
-        if key not in self.allowedKeys.keys():
+        if key not in self.allowedKeys.keys() or key == self.LOG:
             raise ValueError("{} is no valid registry entry".format(key))
 
         if key == self.PIXEL_CLASSIFICATION_WORKER_IPS:
@@ -108,8 +110,15 @@ class Registry(object):
             out = print
 
         for k in self.allowedKeys.keys():
-            if k == self.PC_RANDOM_FOREST:
+            if k == self.LOG:
+                continue
+            elif k == self.PC_RANDOM_FOREST:
                 out("{}=binary blob of length {} ({})".format(k, len(self.get(k)), self.allowedKeys[k]))
             else:    
                 out("{}={} ({})".format(k, self.get(k), self.allowedKeys[k]))
+
+    def writeLogsToFile(self, filename):
+        lines = [l.decode()+'\n' for l in self._redisClient.lrange(self.LOG, 0, self._redisClient.llen(self.LOG))]
+        with open(filename, 'w') as f:
+            f.writelines(lines)
 

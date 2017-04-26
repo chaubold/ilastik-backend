@@ -12,9 +12,8 @@ import requests
 from utils.registry import Registry
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Run a pixel classification service',
+    parser = argparse.ArgumentParser(description='Configure a ilastik as a service for pixel classification and thresholding',
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-p', '--port', type=int, default=8888, help='port on which to run service')
     parser.add_argument('--registry-ip', type=str, required=True,
                         help='IP of the registry service, running at port 6380')
     parser.add_argument('--dataprovider-ip', type=str, required=True,
@@ -23,6 +22,7 @@ if __name__ == '__main__':
                         help='IP:port of the caching redis server')
     parser.add_argument('--messagebroker-ip', type=str, required=True,
                         help='IP of the RabbitMQ message broker')
+    parser.add_argument('--clear-logs', action='store_true', help='Clears the log field in the registry')
 
     parser.add_argument('--project', type=str, required=True, 
                         help='ilastik project with trained random forest')
