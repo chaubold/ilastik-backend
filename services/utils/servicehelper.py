@@ -361,3 +361,20 @@ def collectPredictionBlocksForRoi(blocking, start, stop, dim, cache, finishedQue
 
     blockDataList = [blockData[b] for b in blocksToProcess]
     return combineBlocksToVolume(blocksToProcess, blockDataList, blocking, roi)
+
+def getOwnPublicIp():
+    ''' helper method to extract the public IP address by which clients can access this very machine '''
+    try:
+        # AWS-style:
+        import subprocess
+        ip = subprocess.check_output(['wget','-qO-', 'http://instance-data/latest/meta-data/public-ipv4'])
+    except subprocess.CalledProcessError:
+        try:
+            # Google Cloud:
+            import subprocess
+            ip = subprocess.check_output(['curl', 'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip', '-H', 'Metadata-Flavor: Google'])
+        except subprocess.CalledProcessError:
+            # last resort, use hostname
+            import socket
+            ip = socket.gethostbyname(socket.gethostname())
+    return ip
