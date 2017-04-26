@@ -372,7 +372,7 @@ def getOwnPublicIp():
         try:
             # Google Cloud:
             import subprocess
-            ip = subprocess.check_output(['curl', 'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip', '-H', 'Metadata-Flavor: Google'])
+            ip = subprocess.check_output(['wget', 'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip', '--header', 'Metadata-Flavor: Google'])
         except subprocess.CalledProcessError:
             try:
                 # in normal environments use hostname
