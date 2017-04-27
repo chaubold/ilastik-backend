@@ -113,7 +113,10 @@ class Registry(object):
             if k == self.LOG:
                 continue
             elif k == self.PC_RANDOM_FOREST:
-                out("{}=binary blob of length {} ({})".format(k, len(self.get(k)), self.allowedKeys[k]))
+                blob = self.get(k)
+                if blob is None:
+                    blob = []
+                out("{}=binary blob of length {} ({})".format(k, len(blob), self.allowedKeys[k]))
             else:    
                 out("{}={} ({})".format(k, self.get(k), self.allowedKeys[k]))
 

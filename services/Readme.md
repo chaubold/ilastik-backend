@@ -108,3 +108,29 @@ python volumina_viewer.py --ilastik-ip 0.0.0.0:8080
 ## Implemented communication scheme for blockwise prediction:
 
 ![](ilastik-microservice-communication.png)
+
+# Using the docker image
+
+A dockerimage can be built according to the `Dockerfile`, but is already available on docker hub as [`hcichaubold/ilastikbackend:0.2`](https://hub.docker.com/r/hcichaubold/ilastikbackend/).
+
+It builds on an ubuntu, installs conda, and configures a conda environment to install all required packages (including one for the C++ backend from this repo, available as `conda install ilastikbackend -c chaubold`). Lastly it copies the python files from the `services` folder to the startup folder, and can be run as follows:
+
+```sh
+docker run -d -p 8888:8888 --name test hcichaubold/ilastikbackend:0.2 python pixelclassificationservice.py --registry-ip some.ip.goes.here
+docker run -d -p 8889:8889 --name test hcichaubold/ilastikbackend:0.2 python thresholdingservice.py --registry-ip some.ip.goes.here
+docker run -d -p 8080:8080 --name test hcichaubold/ilastikbackend:0.2 python ilastikgateway.py --registry-ip some.ip.goes.here
+```
+
+A note for Mac users if you run docker locally: due to limitations of _Docker for Mac_, running docker containers cannot talk to ports running on the host, neither by `0.0.0.0` nor `localhost`. So use the workaround presented at the bottom of the [Docker Networking Help page](https://docs.docker.com/docker-for-mac/networking/#i-cannot-ping-my-containers) and create some ip alias.
+
+# Deploying to AWS
+
+To automatically start instances running the respective services, you need to make sure that the user which is logged in (specified in `~/.aws/credentials`) has the `AdministratorAccess` policy!
+
+Then, with the `boto3` python module installed via `conda` or `pip`, you can run:
+
+```sh
+python startAwsClusterIlastik.py --numPcWorkers 4 --logfile path/where/cluster/log/is/saved/at/shutdown.log --project test/pc.ilp
+```
+
+This creates the required roles and permissions, spawns instances, configures the services such that they know the respective IP addresses, and once everything is set up, it waits for the user to press `Ctrl+C` to shut down all instances again.

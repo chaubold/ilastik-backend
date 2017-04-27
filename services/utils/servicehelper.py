@@ -367,12 +367,12 @@ def getOwnPublicIp():
     try:
         # AWS-style:
         import subprocess
-        ip = subprocess.check_output(['wget','-qO-', 'http://instance-data/latest/meta-data/public-ipv4'])
+        ip = subprocess.check_output(['wget','-qO-', 'http://instance-data/latest/meta-data/public-ipv4']).decode()
     except subprocess.CalledProcessError:
         try:
             # Google Cloud:
             import subprocess
-            ip = subprocess.check_output(['wget', 'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip', '--header', 'Metadata-Flavor: Google'])
+            ip = subprocess.check_output(['wget', 'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip', '--header', 'Metadata-Flavor: Google']).decode()
         except subprocess.CalledProcessError:
             try:
                 # in normal environments use hostname
