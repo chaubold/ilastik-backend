@@ -15,17 +15,16 @@ class FinishedQueuePublisher(object):
         '''
         self.host = host
         self.name = name
+        self._connect()
+    
+    def _connect(self):
         self._connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
         self._channel = self._connection.channel()
-        try:
-            self._channel.exchange_delete(exchange=self.name)
-        except:
-            logger.debug("Channel {} did not exist, so we couldn't remove it...".format(self.name))
-        
         self._channel.exchange_declare(exchange=self.name, type='fanout')
 
-
     def finished(self, blockId):
+        if (not self._connection.is_open) or (not self._channel.is_open):
+            self._connect()
         message = str(blockId)
         logger.info("Publishing in channel {}: {} ".format(self.name, message))
         self._channel.basic_publish(exchange=self.name, routing_key='', body=message)
@@ -155,15 +154,20 @@ class TaskQueuePublisher(object):
         '''
         self.host = host
         self.name = name
+        self._connect()
+
+    def _connect(self):
         self._connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
         self._channel = self._connection.channel()
-        self._channel.queue_declare(queue=name) # add durable=True if we want to make queue durable so that messages can survive even if RabbitMQ dies.
+        self._channel.queue_declare(queue=self.name) # add durable=True if we want to make queue durable so that messages can survive even if RabbitMQ dies.
 
     def enqueue(self, blockId):
+        if (not self._connection.is_open) or (not self._channel.is_open):
+            self._connect()
+        
         logger.debug("Enqueueing task for block {}".format(blockId))
         self._channel.basic_publish(exchange='', routing_key=self.name, body=str(blockId), 
             properties=pika.BasicProperties(delivery_mode=2)) # make message persistent
-
 
 class TaskQueueSubscription(threading.Thread):
     def __init__(self, callback, name='block-computation-tasks', host='0.0.0.0'):
