@@ -7,6 +7,7 @@ import tempfile
 import argparse
 import sys
 import numpy as np
+import time
 import atexit
 import h5py
 import vigra
@@ -79,11 +80,13 @@ def processBlock(blockIdx):
         return cachedBlock
     
     rawData = getBlockRawData(blockIdx)
+    t0 = time.time()
     logger.info("Input block {} min {} max {} dtype {} shape {}".format(blockIdx, rawData.min(), rawData.max(), rawData.dtype, rawData.shape))
     features = pixelClassificationBackend.computeFeaturesOfBlock(blockIdx, rawData)
     logger.info("Feature block min {} max {} dtype {} shape {}".format(features.min(), features.max(), features.dtype, features.shape))
     predictions = pixelClassificationBackend.computePredictionsOfBlock(features)
-    logger.info("Prediction block min {} max {} dtype {} shape {}".format(predictions.min(), predictions.max(), predictions.dtype, predictions.shape))
+    t1 = time.time()
+    logger.info("Prediction block min {} max {} dtype {} shape {} took {}".format(predictions.min(), predictions.max(), predictions.dtype, predictions.shape, t1 - t0))
 
     cache.saveBlock(blockIdx, predictions)
     
