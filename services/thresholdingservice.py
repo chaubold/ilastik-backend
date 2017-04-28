@@ -277,13 +277,12 @@ if __name__ == '__main__':
     # set up registry connection and query values
     registry = Registry(options.registry_ip)
     thresholding_ip = registry.get(registry.THRESHOLDING_IP)
-    message_broker_ip = registry.get(registry.MESSAGE_BROKER_IP)
     cache_ip = registry.get(registry.CACHE_IP)
     cache = RedisCache(cache_ip)
 
-    finishedQueueSubscription = FinishedQueueSubscription(host=message_broker_ip)
+    finishedQueueSubscription = FinishedQueueSubscription(host=options.registry_ip)
     finishedQueueSubscription.start()
-    taskQueuePublisher = TaskQueuePublisher(host=message_broker_ip)
+    taskQueuePublisher = TaskQueuePublisher(host=options.registry_ip)
 
     # register this service in the registry
     registry.set(registry.THRESHOLDING_IP, '{}:{}'.format(getOwnPublicIp(), options.port))

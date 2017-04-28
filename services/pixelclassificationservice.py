@@ -282,9 +282,7 @@ if __name__ == '__main__':
     # set up registry connection and query values
     registry = Registry(options.registry_ip)
     cache_ip = registry.get(registry.CACHE_IP)
-    message_broker_ip = registry.get(registry.MESSAGE_BROKER_IP)
-    print("Found message broker ip {}".format(message_broker_ip))
-    finishedQueuePublisher = FinishedQueuePublisher(host=message_broker_ip)
+    finishedQueuePublisher = FinishedQueuePublisher(host=options.registry_ip)
 
     cache = RedisCache(cache_ip)
     if options.clear_cache:
@@ -296,7 +294,7 @@ if __name__ == '__main__':
 
     logger.info("Starting {} worker threads".format(options.num_workers))
     for i in range(options.num_workers):
-        taskQueueSubscription = TaskQueueSubscription(processBlockCallback, host=message_broker_ip)
+        taskQueueSubscription = TaskQueueSubscription(processBlockCallback, host=options.registry_ip)
         taskQueueSubscription.start()
 
     app.run(host='0.0.0.0', port=options.port, debug=False, threaded=True)#, processes=4)

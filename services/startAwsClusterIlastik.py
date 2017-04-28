@@ -3,6 +3,7 @@ import time
 import argparse
 import atexit
 import botocore.exceptions
+import requests
 
 from utils.registry import Registry
 
@@ -13,22 +14,16 @@ def shutdown():
         ec2Client.stop_instances(InstanceIds=[redisInstance[0].id])
         # to terminate the instance: (will be gone after some time after shutdown)
         ec2Client.terminate_instances(InstanceIds=[redisInstance[0].id])
+        print("Cache redis shut down")
     except:
         print("Couldn't shut down redis instance")
-
-    try:
-        # to stop the instance: (remains available as configured machine, can be started again)
-        ec2Client.stop_instances(InstanceIds=[rabbitMqInstance[0].id])
-        # to terminate the instance: (will be gone after some time after shutdown)
-        ec2Client.terminate_instances(InstanceIds=[rabbitMqInstance[0].id])
-    except:
-        print("Couldn't shut down rabbitMq instance")
 
     try:
         # to stop the instance: (remains available as configured machine, can be started again)
         ec2Client.stop_instances(InstanceIds=[i.id for i in pcInstances])
         # to terminate the instance: (will be gone after some time after shutdown)
         ec2Client.terminate_instances(InstanceIds=[i.id for i in pcInstances])
+        print("pc workers shut down")
     except:
         print("Couldn't shut down pixel class workers")
 
@@ -37,6 +32,7 @@ def shutdown():
         ec2Client.stop_instances(InstanceIds=[thresholdingInstance[0].id])
         # to terminate the instance: (will be gone after some time after shutdown)
         ec2Client.terminate_instances(InstanceIds=[thresholdingInstance[0].id])
+        print("thresholding worker shut down")
     except:
         print("Couldn't shut down thresholding instance")
 
@@ -45,6 +41,7 @@ def shutdown():
         ec2Client.stop_instances(InstanceIds=[gatewayInstance[0].id])
         # to terminate the instance: (will be gone after some time after shutdown)
         ec2Client.terminate_instances(InstanceIds=[gatewayInstance[0].id])
+        print("gateway shut down")
     except:
         print("Couldn't shut down gateway instance")
 
@@ -60,6 +57,7 @@ def shutdown():
         ec2Client.stop_instances(InstanceIds=[registryInstance[0].id])
         # to terminate the instance: (will be gone after some time after shutdown)
         ec2Client.terminate_instances(InstanceIds=[registryInstance[0].id])
+        print("registry shut down")
     except:
         print("Couldn't get log and shut down registry instance")
 
@@ -71,7 +69,6 @@ if __name__ == '__main__':
                         help='Number of pixel classification workers to start')
     parser.add_argument('--logfile', type=str, required=True,
                         help='Filename where to save the log')
-
     parser.add_argument('--dataprovider-ip', type=str, required=True,
                         help='IP:port of the dataprovider to use')
 
@@ -96,36 +93,36 @@ if __name__ == '__main__':
 
     # --------------------------------------------------------------------------------
     # delete all old stuff
-    try:
-        print("deleting ilastikuser")
-        iamClient.delete_user(UserName='ilastikuser')
-    except:
-        print("Error when delete ilastikuser")
+    # try:
+    #     print("deleting ilastikuser")
+    #     iamClient.delete_user(UserName='ilastikuser')
+    # except:
+    #     print("Error when delete ilastikuser")
 
-    try:
-        role = iamClient.get_role(RoleName='ilastikInstanceRole')
-        iamClient.delete_policy(PolicyArn=role['Role']['Arn'])
-        print("Deleted policy")
-    except:
-        print("Error when deleting policy")
+    # try:
+    #     role = iamClient.get_role(RoleName='ilastikInstanceRole')
+    #     iamClient.delete_policy(PolicyArn=role['Role']['Arn'])
+    #     print("Deleted policy")
+    # except:
+    #     print("Error when deleting policy")
 
-    try:
-        iamClient.delete_role(RoleName='ilastikInstanceRole')
-        print("Deleted policy")
-    except:
-        print("Error when deleting role")
+    # try:
+    #     iamClient.delete_role(RoleName='ilastikInstanceRole')
+    #     print("Deleted policy")
+    # except:
+    #     print("Error when deleting role")
 
-    try:
-        ec2Client.delete_security_group(GroupName='ilastikFirewallSettingsSecurityGroup')
-        print("Deleted security group")
-    except:
-        print("error when Deleting security group")
+    # try:
+    #     ec2Client.delete_security_group(GroupName='ilastikFirewallSettingsSecurityGroup')
+    #     print("Deleted security group")
+    # except:
+    #     print("error when Deleting security group")
 
-    try:
-        iamClient.delete_instance_profile(InstanceProfileName='ilastikInstanceProfile')
-        print("Deleted instance profile")
-    except:
-        print("error when Deleting instance profile")
+    # try:
+    #     iamClient.delete_instance_profile(InstanceProfileName='ilastikInstanceProfile')
+    #     print("Deleted instance profile")
+    # except:
+    #     print("error when Deleting instance profile")
 
 
     # --------------------------------------------------------------------------------
@@ -133,6 +130,7 @@ if __name__ == '__main__':
     print("Creating ilastikuser")
     try:
         iamClient.create_user(UserName='ilastikuser')
+        # iamClient.create_access_key(UserName='ilastikuser')
     except:
         print("user already exists")
 
@@ -155,17 +153,18 @@ if __name__ == '__main__':
                 ]
         }'''
 
-        policy = iamClient.create_policy(PolicyName='ilastikInstanceRole', PolicyDocument=doc)
+        policy = iamClient.create_policy(PolicyName='ilastikInstanceRole', PolicyDocument=doc)['Policy']
     except:
         print("policy already exists")
+        policies = iamClient.list_policies()
+        policy = [p for p in policies['Policies'] if p['PolicyName'] == 'ilastikInstanceRole'][0]
 
     # --------------------------------------------------------------------------------
     print("Adding policy to user")
     try:
         # give the policy to the user
-        iamClient.create_access_key(UserName='ilastikuser')
         iu = iam.User('ilastikuser')
-        iu.attach_policy(PolicyArn=policy['Policy']['Arn'])
+        iu.attach_policy(PolicyArn=policy['Arn'])
 
         roleDoc = '''{
             "Version": "2012-10-17",
@@ -181,8 +180,8 @@ if __name__ == '__main__':
         # create the role with full SQS and S3 access:
         iamClient.create_role(RoleName='ilastikInstanceRole', AssumeRolePolicyDocument=roleDoc)
         role = iam.Role('ilastikInstanceRole')
-        role.attach_policy(PolicyArn='arn:aws:iam::aws:policy/AmazonSQSFullAccess')
-        role.attach_policy(PolicyArn='arn:aws:iam::aws:policy/AmazonS3FullAccess')
+        # role.attach_policy(PolicyArn='arn:aws:iam::aws:policy/AmazonSQSFullAccess')
+        # role.attach_policy(PolicyArn='arn:aws:iam::aws:policy/AmazonS3FullAccess')
     except:
         print("user already has those permissions")
 
@@ -202,12 +201,19 @@ if __name__ == '__main__':
         ec2Client.authorize_security_group_ingress(GroupName='ilastikFirewallSettingsSecurityGroup', IpProtocol='tcp', FromPort=25672, ToPort=25672, CidrIp='0.0.0.0/0')
         ec2Client.authorize_security_group_ingress(GroupName='ilastikFirewallSettingsSecurityGroup', IpProtocol='tcp', FromPort=5671, ToPort=5671, CidrIp='0.0.0.0/0')
         ec2Client.authorize_security_group_ingress(GroupName='ilastikFirewallSettingsSecurityGroup', IpProtocol='tcp', FromPort=5672, ToPort=5672, CidrIp='0.0.0.0/0')
-
-        # create an instance profile from the role
-        instanceProfile = iamClient.create_instance_profile(InstanceProfileName='ilastikInstanceProfile')
-        iamClient.add_role_to_instance_profile(InstanceProfileName='ilastikInstanceProfile', RoleName='ilastikInstanceRole')
     except:
         print("Security group already exists")
+
+    try:
+        iamClient.create_instance_profile(InstanceProfileName='ilastikInstanceProfile')
+    except:
+        print("Instance profile already exists")
+        
+    try:
+        # create an instance profile from the role
+        iamClient.add_role_to_instance_profile(InstanceProfileName='ilastikInstanceProfile', RoleName='ilastikInstanceRole')
+    except:
+        print("Could not add role to instance profile")
 
     # create instances
     # --------------------------------------------------------------------------------------------------------------------
@@ -237,7 +243,7 @@ if __name__ == '__main__':
     registryInstance[0].load()
     registryIp = registryInstance[0].public_ip_address
     print("Registry running at IP: {}".format(registryIp))
-    
+
     couldConnect = False
     while not couldConnect:
         try:
@@ -277,33 +283,6 @@ if __name__ == '__main__':
     print("Cache running at IP: {}".format(cacheIp))
 
     # --------------------------------------------------------------------------------------------------------------------
-    instanceCreated = False
-    while not instanceCreated:
-        try:
-            rabbitMqInstance = ec2.create_instances(ImageId='ami-f4cc1de2', # specify a machine image
-                                            MinCount=1, # choose a larger number here if you want more than one instance!
-                                            MaxCount=1,
-                                            KeyName='aws', # specify an SSH key pair that you have created in the AWS console to be able to SSH to the machine. Comment out if not needed.
-                                            InstanceType='t2.micro', # select the instance type
-                                            SecurityGroups=['ilastikFirewallSettingsSecurityGroup'],
-                                            IamInstanceProfile={'Name':'ilastikInstanceProfile'},
-                                            UserData="""#!/bin/bash
-            sudo apt-get update --fix-missing
-            sudo apt-get install -y docker.io
-            sudo docker run -d -p 4369:4369 -p 25672:25672 -p 5671-5672:5671-5672 --name rabbitmq rabbitmq:3
-            """)
-            instanceCreated = True
-        except botocore.exceptions.ClientError:
-            print("Couldn't create instance yet, waiting 5 seconds to make sure all roles and profiles are available")
-            time.sleep(5)
-
-    # to figure out the dns name or IP:
-    rabbitMqInstance[0].wait_until_running()
-    rabbitMqInstance[0].load()
-    messageBrokerIp = rabbitMqInstance[0].public_ip_address
-    print("Message Broker running at IP: {}".format(messageBrokerIp))
-
-    # --------------------------------------------------------------------------------------------------------------------
     # Configure cluster:
     import subprocess
 
@@ -316,7 +295,6 @@ if __name__ == '__main__':
                              "--registry-ip", registryIp,
                              "--cache-ip", cacheIp+":6379",
                              "--dataprovider-ip", options.dataprovider_ip,
-                             "--messagebroker-ip", messageBrokerIp,
                              "--project", options.project,
                              "--threshold", str(options.threshold),
                              "--channel", str(options.channel),
@@ -337,7 +315,7 @@ if __name__ == '__main__':
                                             UserData="""#!/bin/bash
             sudo apt-get update --fix-missing
             sudo apt-get install -y docker.io
-            sudo docker run -d -p 8888:8888 --name test hcichaubold/ilastikbackend:0.2 python pixelclassificationservice.py --registry-ip {}
+            sudo docker run -d -p 8888:8888 --name test hcichaubold/ilastikbackend:0.3 python pixelclassificationservice.py --registry-ip {}
             """.format(registryIp))
             instanceCreated = True
         except botocore.exceptions.ClientError:
@@ -363,7 +341,7 @@ if __name__ == '__main__':
                                             UserData="""#!/bin/bash
             sudo apt-get update --fix-missing
             sudo apt-get install -y docker.io
-            sudo docker run -d -p 8889:8889 --name test hcichaubold/ilastikbackend:0.2 python thresholdingservice.py --registry-ip {}
+            sudo docker run -d -p 8889:8889 --name test hcichaubold/ilastikbackend:0.3 python thresholdingservice.py --registry-ip {}
             """.format(registryIp))
             instanceCreated = True
         except botocore.exceptions.ClientError:
@@ -390,7 +368,7 @@ if __name__ == '__main__':
                                             UserData="""#!/bin/bash
             sudo apt-get update --fix-missing
             sudo apt-get install -y docker.io
-            sudo docker run -d -p 8080:8080 --name test hcichaubold/ilastikbackend:0.2 python ilastikgateway.py --registry-ip {}
+            sudo docker run -d -p 8080:8080 --name test hcichaubold/ilastikbackend:0.3 python ilastikgateway.py --registry-ip {}
             """.format(registryIp))
             instanceCreated = True
         except botocore.exceptions.ClientError:
@@ -401,6 +379,19 @@ if __name__ == '__main__':
     gatewayInstance[0].wait_until_running()
     gatewayInstance[0].load()
     gatewayIp = gatewayInstance[0].public_ip_address
+    print("Gateway is started at {}:8080, trying to connect...".format(gatewayIp))
+    couldConnect = False
+    while not couldConnect:
+        try:
+            r = requests.get('http://{}:8080/doc'.format(gatewayIp), timeout=1)
+            if r.status_code != 200:
+                print('Gateway not reachable yet...')
+                time.sleep(5)
+            else:
+                couldConnect = True
+        except:
+            print('Gateway not reachable yet...')
+            time.sleep(5)
 
     print("All instances set up, gateway running at {}:8080".format(gatewayIp))
 

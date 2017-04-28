@@ -17,7 +17,6 @@ configuration in the `configurePCWorkflow.py` script. Then, pixel classification
 * Autodoc (will probably replaced in the future): `pip install Flask-Autodoc`
 * Requests: `conda install requests`
 * Redis-py: `conda install redis-py`
-* The pika RabbitMQ client: `pip install pika`
 
 Additionally, the C++ part of this project must be built with its python bindings:
 
@@ -33,14 +32,13 @@ cmake .. # and configure everything properly, including WITH_PYTHON=TRUE, you ne
 make install
 ```
 
-You also need to run redis and RabbitMQ servers on their default ports for caching and task queues.
-Additionally, we use a redis instance for service discovery and global configuration (In a professional setup one would use e.g. [etcd](https://github.com/coreos/etcd) or [Consul](https://www.consul.io/) for that).
+You also need to run two redis servers, one on the default port for caching, and
+additionally, we use a redis instance for service discovery, task queues and global configuration (In a professional setup one would use e.g. [etcd](https://github.com/coreos/etcd) or [Consul](https://www.consul.io/) for service discovery).
 Install docker and run the latest redis and rabbitmq in a linux container as follows: 
     
 ```sh
 docker run -d -p 6379:6379 --name redis bitnami/redis:latest
 docker run -d -p 6380:6379 --name registry bitnami/redis:latest
-docker run -d --hostname <your host name> -p 4369:4369 -p 25672:25672 -p 5671-5672:5671-5672 --name rabbitmq rabbitmq:3
 ```
 
 Where the parameters mean:
@@ -62,7 +60,7 @@ python dataproviderservice.py --raw-data-file test/raw.h5 --raw-data-path export
 This sends the random forest and the feature selection to the registry, and configures pixel classification and thresholding
 
 ```sh
-python configurePCWorkflow.py --registry-ip 0.0.0.0 --cache-ip 0.0.0.0:6379 --dataprovider-ip 0.0.0.0:9000 --messagebroker-ip 0.0.0.0 --project test/pc.ilp
+python configurePCWorkflow.py --registry-ip 0.0.0.0 --cache-ip 0.0.0.0:6379 --dataprovider-ip 0.0.0.0:9000 --project test/pc.ilp
 ```
 
 ## Start pixel classification and thresholding workers, and the gateway

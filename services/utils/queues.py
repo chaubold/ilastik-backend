@@ -1,37 +1,29 @@
-import pika
+import redis
 import time
 import logging
 import threading
 logger = logging.getLogger(__name__)
 
-# see the RabbitMQ tutorials for the different styles of pub/sub with fanout, or the work queues by prefetching only one message per worker.
+# using the registry Redis, and keyspace notifications to "listen" on channels
 
 # --------------------------------------------------------------
 
 class FinishedQueuePublisher(object):
-    def __init__(self, name='finished-blocks', host='0.0.0.0'):
+    def __init__(self, name='finished-blocks', host='0.0.0.0', port=6380):
         '''
         A publisher for finished blocks
         '''
         self.host = host
         self.name = name
-        self._connect()
+        self._redis = redis.StrictRedis(host=host, port=port)
     
-    def _connect(self):
-        self._connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
-        self._channel = self._connection.channel()
-        self._channel.exchange_declare(exchange=self.name, type='fanout')
-
     def finished(self, blockId):
-        if (not self._connection.is_open) or (not self._channel.is_open):
-            self._connect()
         message = str(blockId)
         logger.info("Publishing in channel {}: {} ".format(self.name, message))
-        self._channel.basic_publish(exchange=self.name, routing_key='', body=message)
-
+        self._redis.rpush(self.name, message)
 
 class FinishedQueueSubscription(threading.Thread):
-    def __init__(self, name='finished-blocks', host='0.0.0.0'):
+    def __init__(self, name='finished-blocks', host='0.0.0.0', port=6380):
         '''
         Start listening for messages on the finished queue (by subscribing to the publisher).
         There should be only one instance of this subscription per process, and whoever wants to be 
@@ -40,29 +32,41 @@ class FinishedQueueSubscription(threading.Thread):
         super(FinishedQueueSubscription, self).__init__()
         self.host = host
         self.name = name
+        self.port = port
+        self._redis = redis.StrictRedis(host=host, port=port)
+        self._redis.config_set('notify-keyspace-events', 'Kl') # listen on keyspace events of lists!
         self._nextCallbackId = 0
         self._callbacks = {}
         self._callbacksLock = threading.Lock()
 
     def run(self):
-        # start listening for messages on the specified queue
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
-        channel = connection.channel()
-        channel.exchange_declare(exchange=self.name, type='fanout')
-        result = channel.queue_declare(exclusive=True)
-        queue_name = result.method.queue
-        
-        channel.queue_bind(exchange=self.name, queue=queue_name)
-
-        def consumerCallback(channel, method, properties, body):
+        ''' wait for finished block replies and call callbacks '''
+        def consumerCallback(body):
             logger.debug("Found finished message for block {}".format(body))
             # body is a bytes object containing an int as string
             with self._callbacksLock:
                 for cb in self._callbacks.values():
                     cb(int(body.decode()))
 
-        channel.basic_consume(consumerCallback, queue=queue_name, no_ack=True)
-        channel.start_consuming()
+        # start listening for messages on changes to the specified list
+        p = self._redis.pubsub(ignore_subscribe_messages=True)
+        p.subscribe('__keyspace@0__:{}'.format(self.name))
+
+        currentListIndex = self._redis.llen(self.name)
+        i = 0
+        while True:
+            m = p.get_message()
+            listWasAppendedTo = m and 'push' in m['data'].decode()
+
+            if listWasAppendedTo or i > 10:
+                while self._redis.llen(self.name) > currentListIndex:
+                    consumerCallback(self._redis.lindex(self.name, currentListIndex))
+                    currentListIndex += 1
+                i = 0
+            else:
+                i += 1
+                time.sleep(0.01)
+
 
     def registerCallback(self, callback):
         ''' Register a callback function. Returns this callback's ID which is needed if the callback is to removed later '''
@@ -148,29 +152,20 @@ class FinishedBlockCollectorThread(threading.Thread):
 # --------------------------------------------------------------
 
 class TaskQueuePublisher(object):
-    def __init__(self, name='block-computation-tasks', host='0.0.0.0'):
+    def __init__(self, name='block-computation-tasks', host='0.0.0.0', port=6380):
         '''
         A publisher for finished blocks
         '''
         self.host = host
         self.name = name
-        self._connect()
-
-    def _connect(self):
-        self._connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
-        self._channel = self._connection.channel()
-        self._channel.queue_declare(queue=self.name) # add durable=True if we want to make queue durable so that messages can survive even if RabbitMQ dies.
+        self._redis = redis.StrictRedis(host=host, port=port)
 
     def enqueue(self, blockId):
-        if (not self._connection.is_open) or (not self._channel.is_open):
-            self._connect()
-        
         logger.debug("Enqueueing task for block {}".format(blockId))
-        self._channel.basic_publish(exchange='', routing_key=self.name, body=str(blockId), 
-            properties=pika.BasicProperties(delivery_mode=2)) # make message persistent
+        self._redis.rpush(self.name, str(blockId))
 
 class TaskQueueSubscription(threading.Thread):
-    def __init__(self, callback, name='block-computation-tasks', host='0.0.0.0'):
+    def __init__(self, callback, name='block-computation-tasks', host='0.0.0.0', port=6380):
         '''
         Start listening for messages on the finished queue (by subscribing to the publisher).
         There should be one instance per worker process or thread.
@@ -179,20 +174,30 @@ class TaskQueueSubscription(threading.Thread):
         self.host = host
         self.name = name
         self.callback = callback
+        self._redis = redis.StrictRedis(host=host, port=port)
+        self._redis.config_set('notify-keyspace-events', 'Kl') # listen on keyspace events of lists!
 
     def run(self):
-        # start listening for messages on the specified queue
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
-        channel = connection.channel()
-        channel.queue_declare(queue=self.name)
-
-        def consumerCallback(channel, method, properties, body):
+        def consumerCallback(body):
             logger.debug("TaskQueueSubscription: Got message {}".format(body))
             # body is a bytes object containing an int as string
             self.callback(int(body.decode()))
 
-            channel.basic_ack(delivery_tag=method.delivery_tag)
+        # start listening for messages on changes to the specified list, 
+        p = self._redis.pubsub(ignore_subscribe_messages=True)
+        p.subscribe('__keyspace@0__:{}'.format(self.name))
 
-        channel.basic_qos(prefetch_count=1)
-        channel.basic_consume(consumerCallback, queue=self.name)
-        channel.start_consuming()
+        i = 10 # check for present tasks right at the beginning
+        while True:
+            m = p.get_message()
+            listWasAppendedTo = m and 'push' in m['data'].decode()
+
+            if listWasAppendedTo or i > 10:
+                # if a task is found, pop it from the list so that nobody else gets it
+                task = self._redis.lpop(self.name)
+                if task:
+                    consumerCallback(task)
+                i = 0
+            else:
+                i += 1
+                time.sleep(0.01)

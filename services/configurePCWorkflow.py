@@ -20,8 +20,6 @@ if __name__ == '__main__':
                         help='IP:port of the dataprovider to use')
     parser.add_argument('--cache-ip', type=str, required=True,
                         help='IP:port of the caching redis server')
-    parser.add_argument('--messagebroker-ip', type=str, required=True,
-                        help='IP of the RabbitMQ message broker')
     parser.add_argument('--clear-logs', action='store_true', help='Clears the log field in the registry')
 
     parser.add_argument('--project', type=str, required=True, 
@@ -70,7 +68,6 @@ if __name__ == '__main__':
     print("Sending them to {}".format(options.registry_ip))
     registry.set(registry.DATA_PROVIDER_IP, options.dataprovider_ip)
     registry.set(registry.CACHE_IP, options.cache_ip)
-    registry.set(registry.MESSAGE_BROKER_IP, options.messagebroker_ip)
 
     # ilastik workflow configuration
     registry.set(registry.PC_FEATURES, selectedFeatureScalePairs)

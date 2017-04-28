@@ -23,7 +23,6 @@ class Registry(object):
     GATEWAY_IP = "GATEWAY_IP"
     PIXEL_CLASSIFICATION_WORKER_IPS = "PIXEL_CLASSIFICATION_WORKER_IPS"
     CACHE_IP = "CACHE_IP"
-    MESSAGE_BROKER_IP = "MESSAGE_BROKER_IP"
     PC_FEATURES = "PC_FEATURES"
     PC_RANDOM_FOREST = "PC_RANDOM_FOREST"
     THRESHOLD_VALUE = "THRESHOLD_VALUE"
@@ -38,7 +37,6 @@ class Registry(object):
         GATEWAY_IP: "IP:port of the ilastik gateway",
         PIXEL_CLASSIFICATION_WORKER_IPS: "List of IP:port addresses of pixelclassification workers",
         CACHE_IP: "IP:port address of the Redis instance used for caching. Must be running at the default port 6379.",
-        MESSAGE_BROKER_IP: "IP:port of the rabbitMQ instance used for task queuing",
         PC_FEATURES: "Selected pixel classification features as JSON",
         PC_RANDOM_FOREST: "Binary blob of the HDF5 file containing the random forest for pixel classification",
         THRESHOLD_VALUE: "Thresholding value at which probability a pixel counts as foreground",
