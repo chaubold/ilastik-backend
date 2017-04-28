@@ -315,18 +315,42 @@ if __name__ == '__main__':
                                             UserData="""#!/bin/bash
             sudo apt-get update --fix-missing
             sudo apt-get install -y docker.io
-            sudo docker run -d -p 8888:8888 --name test hcichaubold/ilastikbackend:0.3 python pixelclassificationservice.py --registry-ip {}
-            """.format(registryIp))
+            """)
+            # "sudo docker run -d -p 8888:8888 --name test hcichaubold/ilastikbackend:0.3 python pixelclassificationservice.py --registry-ip {} --verbose".format(registryIp)
+
+            # wget --quiet https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+            # /bin/bash ~/miniconda.sh -b -p /home/ubuntu/conda
+            # rm ~/miniconda.sh
+            # export PATH=/home/ubuntu/conda/bin:${{PATH}}
+            # conda create -y -n ilastikenv python=3.5
+            # source activate ilastikenv
+            # conda install -y flask redis-py requests
+            # pip install Flask_Autodoc
+            # pip install pika
+            # conda install -y ilastikbackend h5py numpy -c chaubold -c conda-forge
+            # conda clean --all -y
+            # cd /home/ubuntu
+            # git clone https://github.com/chaubold/ilastik-backend
+            # cd ilastik-backend/
+            # git checkout microservice
+            # cd services/
+            # echo "python pixelclassificationservice.py --registry-ip {} --verbose" | at now
+
             instanceCreated = True
         except botocore.exceptions.ClientError:
             print("Couldn't create instance yet, waiting 5 seconds to make sure all roles and profiles are available")
             time.sleep(5)
 
+    pixelClassIps = []
+    pixelClassDns = []
     for pi in pcInstances:
         pi.wait_until_running()
         pi.load()
-        print("Pixel Classification Worker at IP {}".format(pi.public_ip_address))
+        pixelClassIps.append(pi.public_ip_address)
+        pixelClassDns.append(pi.public_dns_name)
+        print("Pixel Classification Worker at IP {}, DNS {}".format(pi.public_ip_address, pi.public_dns_name))
 
+    print(pixelClassDns)
     # --------------------------------------------------------------------------------------------------------------------
     instanceCreated = False
     while not instanceCreated:
@@ -335,14 +359,33 @@ if __name__ == '__main__':
                                             MinCount=1, # choose a larger number here if you want more than one instance!
                                             MaxCount=1,
                                             KeyName='aws', # specify an SSH key pair that you have created in the AWS console to be able to SSH to the machine. Comment out if not needed.
-                                            InstanceType='t2.micro', # select the instance type
+                                            InstanceType='t2.large', # select the instance type: larger RAM for thresholding!
                                             SecurityGroups=['ilastikFirewallSettingsSecurityGroup'],
                                             IamInstanceProfile={'Name':'ilastikInstanceProfile'},
                                             UserData="""#!/bin/bash
             sudo apt-get update --fix-missing
             sudo apt-get install -y docker.io
-            sudo docker run -d -p 8889:8889 --name test hcichaubold/ilastikbackend:0.3 python thresholdingservice.py --registry-ip {}
-            """.format(registryIp))
+            """)
+            
+            # wget --quiet https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+            # /bin/bash ~/miniconda.sh -b -p /home/ubuntu/conda
+            # rm ~/miniconda.sh
+            # export PATH=/home/ubuntu/conda/bin:${{PATH}}
+            # conda create -y -n ilastikenv python=3.5
+            # source activate ilastikenv
+            # conda install -y flask redis-py requests
+            # pip install Flask_Autodoc
+            # pip install pika
+            # conda install -y ilastikbackend h5py numpy -c chaubold -c conda-forge
+            # conda clean --all -y
+            # cd /home/ubuntu
+            # git clone https://github.com/chaubold/ilastik-backend
+            # cd ilastik-backend/
+            # git checkout microservice
+            # cd services/
+            # echo "python thresholdingservice.py --registry-ip {} --verbose" | at now
+
+            # sudo docker run -d -p 8889:8889 --name test hcichaubold/ilastikbackend:0.3 python thresholdingservice.py --registry-ip {} --verbose
             instanceCreated = True
         except botocore.exceptions.ClientError:
             print("Couldn't create instance yet, waiting 5 seconds to make sure all roles and profiles are available")
@@ -352,7 +395,8 @@ if __name__ == '__main__':
     thresholdingInstance[0].wait_until_running()
     thresholdingInstance[0].load()
     thresholdingIp = thresholdingInstance[0].public_ip_address
-    print("Thresholding running at IP: {}".format(thresholdingIp))
+    thresholdingDns = thresholdingInstance[0].public_dns_name
+    print("Thresholding running at IP: {}, DNS: {}".format(thresholdingIp, thresholdingDns))
 
     # --------------------------------------------------------------------------------------------------------------------
     instanceCreated = False
@@ -368,8 +412,28 @@ if __name__ == '__main__':
                                             UserData="""#!/bin/bash
             sudo apt-get update --fix-missing
             sudo apt-get install -y docker.io
-            sudo docker run -d -p 8080:8080 --name test hcichaubold/ilastikbackend:0.3 python ilastikgateway.py --registry-ip {}
-            """.format(registryIp))
+            """)
+
+            # wget --quiet https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+            # /bin/bash ~/miniconda.sh -b -p /home/ubuntu/conda
+            # rm ~/miniconda.sh
+            # export PATH=/home/ubuntu/conda/bin:${{PATH}}
+            # conda create -y -n ilastikenv python=3.5
+            # source activate ilastikenv
+            # conda install -y flask redis-py requests
+            # pip install Flask_Autodoc
+            # pip install pika
+            # conda install -y ilastikbackend h5py numpy -c chaubold -c conda-forge
+            # conda clean --all -y
+            # cd /home/ubuntu
+            # git clone https://github.com/chaubold/ilastik-backend
+            # cd ilastik-backend/
+            # git checkout microservice
+            # cd services/
+            # echo "python ilastikgateway.py --registry-ip {} --verbose" | at now
+
+            
+            # sudo docker run -d -p 8080:8080 --name test hcichaubold/ilastikbackend:0.3 python ilastikgateway.py --registry-ip {}  --verbose
             instanceCreated = True
         except botocore.exceptions.ClientError:
             print("Couldn't create instance yet, waiting 5 seconds to make sure all roles and profiles are available")
@@ -379,28 +443,47 @@ if __name__ == '__main__':
     gatewayInstance[0].wait_until_running()
     gatewayInstance[0].load()
     gatewayIp = gatewayInstance[0].public_ip_address
-    print("Gateway is started at {}:8080, trying to connect...".format(gatewayIp))
-    couldConnect = False
-    while not couldConnect:
-        try:
-            r = requests.get('http://{}:8080/doc'.format(gatewayIp), timeout=1)
-            if r.status_code != 200:
-                print('Gateway not reachable yet...')
-                time.sleep(5)
-            else:
-                couldConnect = True
-        except:
-            print('Gateway not reachable yet...')
-            time.sleep(5)
+    gatewayDns = gatewayInstance[0].public_dns_name
+    print("Gateway is started at IP {}, DNS {}".format(gatewayIp, gatewayDns))
+    
+    # def checkConnection(ip, port, name):
+    #     couldConnect = False
+    #     while not couldConnect:
+    #         try:
+    #             r = requests.get('http://{}:{}/doc'.format(ip, port), timeout=1)
+    #             if r.status_code != 200:
+    #                 print('{}(@{}:{}) not reachable yet...'.format(name, ip, port))
+    #                 time.sleep(5)
+    #             else:
+    #                 couldConnect = True
+    #         except:
+    #             print('{}(@{}:{}) not reachable yet...'.format(name, ip, port))
+    #             time.sleep(5)
 
-    print("All instances set up, gateway running at {}:8080".format(gatewayIp))
+    # checkConnection(gatewayIp, 8080, "gateway")
+    # checkConnection(thresholdingIp, 8889, "thresholdingservice")
+    # for pcIp in pixelClassIps:
+    #     checkConnection(pcIp, 8888, "pixelclassificationservice")
+
+    # r = requests.get('http://{}:8080/setup'.format(gatewayIp))
+    # if r.status_code != 200:
+    #     print('Gateway could not be configured...')
+    #     exit()
+
+    # print("All instances set up, gateway running at {}:8080".format(gatewayIp))
 
     # --------------------------------------------------------------------------------------------------------------------
 
-    print("Waiting for the user to press Ctrl+C before instances are shut down again")
+    print("Waiting for the user to press Ctrl+C before instances are shut down again\nPrinting log from all services\n\n\n\n\n")
     try:
+        lastLogEntry = 0
         while True:
-            time.sleep(1)
+            time.sleep(0.1)
+            if registry._redisClient.llen(registry.LOG) > lastLogEntry:
+                logMessages = [m.decode() for m in registry._redisClient.lrange(registry.LOG, lastLogEntry, registry._redisClient.llen(registry.LOG))]
+                for m in logMessages:
+                    print(m)
+                lastLogEntry += len(logMessages)
     except KeyboardInterrupt:
         print("Ctrl+C pressed. Stopping down instances")
 
