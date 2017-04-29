@@ -25,6 +25,7 @@ from utils.voxels_nddata_codec import VoxelsNddataCodec
 from utils.queues import TaskQueueSubscription, FinishedQueuePublisher
 from utils.registry import Registry
 from utils.redisloghandler import RedisLogHandler
+import utils.featurecomputer
 
 # flask setup
 app = Flask("pixelclassificationservice")
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 registry = None
 dataprovider_ip = None
 pixelClassificationBackend = None
+featureComputer = None
 cache = None
 dtype = None
 dim = None
@@ -68,6 +70,15 @@ def getBlockRawData(blockIdx):
 
     return rawData
 
+def computeFeatures(blockIdx, rawData):
+    if utils.featurecomputer.WITH_FAST_FILTERS:
+        logger.info("Using Fast Filters to compute features")
+        blockWithHalo = pixelClassificationBackend.blocking.getBlockWithHalo(blockIdx, pixelClassificationBackend.haloSize)
+        return featureComputer.computeAndCrop(rawData, blockWithHalo)
+    else:
+        logger.info("Using VIGRA to compute features")
+        return pixelClassificationBackend.computeFeaturesOfBlock(blockIdx, rawData)
+
 def processBlock(blockIdx):
     '''
     Main computational method for processing blocks
@@ -82,7 +93,7 @@ def processBlock(blockIdx):
     rawData = getBlockRawData(blockIdx)
     t0 = time.time()
     logger.info("Input block {} min {} max {} dtype {} shape {}".format(blockIdx, rawData.min(), rawData.max(), rawData.dtype, rawData.shape))
-    features = pixelClassificationBackend.computeFeaturesOfBlock(blockIdx, rawData)
+    features = computeFeatures(blockIdx, rawData)
     logger.info("Feature block min {} max {} dtype {} shape {}".format(features.min(), features.max(), features.dtype, features.shape))
     predictions = pixelClassificationBackend.computePredictionsOfBlock(features)
     t1 = time.time()
@@ -112,6 +123,8 @@ def loadSelectedFeatures():
     '''
     selectedFeatureScalePairs = json.loads(registry.get(registry.PC_FEATURES))
     pixelClassificationBackend.configureSelectedFeatures(selectedFeatureScalePairs)
+    global featureComputer
+    featureComputer = utils.featurecomputer.FeatureComputer(selectedFeatureScalePairs)
 
 def configure():
     global dataprovider_ip
@@ -291,6 +304,8 @@ if __name__ == '__main__':
     if options.clear_cache:
         # get rid of previously stored blocks
         cache.clear()
+        registry._redisClient.delete('block-computation-tasks')
+        registry._redisClient.delete('finished-blocks')
 
     # register this service in the registry
     registry.set(registry.PIXEL_CLASSIFICATION_WORKER_IPS, '{}:{}'.format(getOwnPublicIp(), options.port))

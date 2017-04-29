@@ -22,11 +22,11 @@ RUN conda create -n ilastikenv python=3.5
 ENV PATH /opt/conda/envs/ilastikenv/bin:$PATH
 ENV CONDA_PREFIX /opt/conda/envs/ilastikenv
 ENV CONDA_DEFAULT_ENV ilastikenv
-RUN conda install -y flask redis-py && \
+RUN conda install -y flask redis-py requests && \
     pip install Flask_Autodoc && \
-    pip install pika && \
-    conda install -y ilastikbackend h5py numpy -c chaubold -c conda-forge
-RUN conda install -y requests
+    pip install pika
+RUN conda install -y ilastikbackend h5py numpy -c chaubold -c conda-forge
+RUN conda install -y fastfilters -c chaubold -c conda-forge
 
 # free at least some space, conda is eating up a lot of memory!
 RUN conda clean --all -y
