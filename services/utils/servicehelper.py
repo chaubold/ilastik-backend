@@ -45,7 +45,7 @@ class RedisCache(Cache):
     '''
     _dummyBlock = 'dummy'
 
-    def __init__(self, ip='0.0.0.0:6379', maxmemory='500mb'):
+    def __init__(self, ip='0.0.0.0:6379', maxmemory='900mb'):
         super(RedisCache, self).__init__()
         host, port = ip.split(':')
         self._redisClient = redis.StrictRedis(host=host, port=port)
@@ -54,6 +54,7 @@ class RedisCache(Cache):
         # See https://redis.io/topics/lru-cache for details
         self._redisClient.config_set('maxmemory', maxmemory)
         self._redisClient.config_set('maxmemory-policy', 'allkeys-lru')
+        self._redisClient.config_set('stop-writes-on-bgsave-error', 'no')
 
     def readBlock(self, blockIdx, insertDummyIfNotFound=False):
         '''
