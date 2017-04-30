@@ -9,6 +9,7 @@ from utils.registry import Registry
 
 @atexit.register
 def shutdown():
+    print("Shutting down... Please stand by")
     try:
         # to stop the instance: (remains available as configured machine, can be started again)
         ec2Client.stop_instances(InstanceIds=[redisInstance[0].id])
@@ -445,6 +446,10 @@ if __name__ == '__main__':
     gatewayIp = gatewayInstance[0].public_ip_address
     gatewayDns = gatewayInstance[0].public_dns_name
     print("Gateway is started at IP {}, DNS {}".format(gatewayIp, gatewayDns))
+
+    print("You may want to run the following command:")
+    print("python runServices --registry-ip {regIp} --thresholding-dns {threshDns} --gateway-dns {gateDns} --pixelclass-dns {pcDnsS} --pem <yourpemfile> --logfile <yourlogfile>".format(
+        regIp=registryIp, threshDns=thresholdingDns, gateDns=gatewayDns, pcDnsS=' '.join(pixelClassDns)))
     
     # def checkConnection(ip, port, name):
     #     couldConnect = False

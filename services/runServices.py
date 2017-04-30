@@ -11,6 +11,7 @@ from utils.servicehelper import RedisCache
 
 @atexit.register
 def shutdown():
+    print("Shutting down... Please stand by")
     def stopContainer(dns):
         try:
             subprocess.check_call(["ssh", "-oStrictHostKeyChecking=no", "-i", options.pem, "ubuntu@{}".format(dns), "sudo", "docker", "stop", "test"])
@@ -73,13 +74,13 @@ if __name__ == '__main__':
     commandlines = []
     for dns in options.pixelclass_dns:
         print("Starting PC worker ", dns)
-        commandlines.append(["ssh", "-oStrictHostKeyChecking=no", "-i", options.pem, "ubuntu@{}".format(dns), "sudo", "docker", "run", "-d", "-p", "8888:8888", "--name", "test", "hcichaubold/ilastikbackend:0.6", "python", "pixelclassificationservice.py", "--registry-ip", options.registry_ip, "--verbose"])
+        commandlines.append(["ssh", "-oStrictHostKeyChecking=no", "-i", options.pem, "ubuntu@{}".format(dns), "sudo", "docker", "run", "-d", "-p", "8888:8888", "--name", "test", "hcichaubold/ilastikbackend:0.7", "python", "pixelclassificationservice.py", "--registry-ip", options.registry_ip, "--verbose"])
 
     print("Starting thresholding worker ", options.thresholding_dns)
-    commandlines.append(["ssh", "-oStrictHostKeyChecking=no", "-i", options.pem, "ubuntu@{}".format(options.thresholding_dns), "sudo", "docker", "run", "-d", "-p", "8889:8889", "--name", "test", "hcichaubold/ilastikbackend:0.6", "python", "thresholdingservice.py", "--registry-ip", options.registry_ip, "--verbose"])
+    commandlines.append(["ssh", "-oStrictHostKeyChecking=no", "-i", options.pem, "ubuntu@{}".format(options.thresholding_dns), "sudo", "docker", "run", "-d", "-p", "8889:8889", "--name", "test", "hcichaubold/ilastikbackend:0.7", "python", "thresholdingservice.py", "--registry-ip", options.registry_ip, "--verbose"])
 
     print("Starting thresholding worker ", options.gateway_dns)
-    commandlines.append(["ssh", "-oStrictHostKeyChecking=no", "-i", options.pem, "ubuntu@{}".format(options.gateway_dns), "sudo", "docker", "run", "-d", "-p", "8080:8080", "--name", "test", "hcichaubold/ilastikbackend:0.6", "python", "ilastikgateway.py", "--registry-ip", options.registry_ip, "--verbose"])
+    commandlines.append(["ssh", "-oStrictHostKeyChecking=no", "-i", options.pem, "ubuntu@{}".format(options.gateway_dns), "sudo", "docker", "run", "-d", "-p", "8080:8080", "--name", "test", "hcichaubold/ilastikbackend:0.7", "python", "ilastikgateway.py", "--registry-ip", options.registry_ip, "--verbose"])
 
     pool = Pool(processes=len(commandlines))
     pool.map(subprocess.check_call, commandlines)

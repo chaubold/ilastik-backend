@@ -94,10 +94,11 @@ def processBlock(blockIdx):
     t0 = time.time()
     logger.info("Input block {} min {} max {} dtype {} shape {}".format(blockIdx, rawData.min(), rawData.max(), rawData.dtype, rawData.shape))
     features = computeFeatures(blockIdx, rawData)
-    logger.info("Feature block min {} max {} dtype {} shape {}".format(features.min(), features.max(), features.dtype, features.shape))
-    predictions = pixelClassificationBackend.computePredictionsOfBlock(features)
     t1 = time.time()
-    logger.info("Prediction block min {} max {} dtype {} shape {} took {}".format(predictions.min(), predictions.max(), predictions.dtype, predictions.shape, t1 - t0))
+    logger.info("Feature block min {} max {} dtype {} shape {} computed in {}".format(features.min(), features.max(), features.dtype, features.shape, t1-t0))
+    predictions = pixelClassificationBackend.computePredictionsOfBlock(features)
+    t2 = time.time()
+    logger.info("Prediction block min {} max {} dtype {} shape {} computed in {}, total processing took {}".format(predictions.min(), predictions.max(), predictions.dtype, predictions.shape, t2-t1, t2 - t0))
 
     cache.saveBlock(blockIdx, predictions)
     
