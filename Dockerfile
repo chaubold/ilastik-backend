@@ -25,7 +25,7 @@ ENV CONDA_DEFAULT_ENV ilastikenv
 RUN conda install -y flask redis-py requests && \
     pip install Flask_Autodoc && \
     pip install pika
-RUN conda install -y ilastikbackend vigra h5py numpy -c chaubold -c conda-forge
+RUN conda install -y ilastikbackend=0.1.post3 h5py numpy -c chaubold -c conda-forge
 RUN conda install -y fastfilters -c chaubold -c conda-forge
 
 # free at least some space, conda is eating up a lot of memory!
