@@ -8,7 +8,7 @@ to follow a certain order. All the services listed at the top should be started 
 Then, the dataprovider IP needs to be stored in the registry, which we do together with some other 
 configuration in the `configurePCWorkflow.py` script. Then, pixel classification workers, the thresholding service, and the gateway need to be started in that order. Lastly, a user must call the `/setup` end point of the gateway to finish configuration.
 
-![](ilastik-microservice-startup.png)
+![](figs/ilastik-microservice-startup.png)
 
 
 ## Requirements
@@ -105,7 +105,13 @@ python volumina_viewer.py --ilastik-ip 0.0.0.0:8080
 
 ## Implemented communication scheme for blockwise prediction:
 
-![](ilastik-microservice-communication.png)
+Architecture for Pixel Classification and Thresholding
+![](figs/microservicesPC.png)
+
+Communication sequence diagram
+![](figs/microservices-communication.png)
+
+We chose to make all external access, as well as internal configuration calls synchronous via a REST API. The data provider is also accessed via REST. But for the internal distribution of tasks, we employ an asynchronous communication model using task queues and a publish/subscribe pattern for notification about finished tasks, which is sent as soon as results are stored in the central cache. A detailed sequence diagram of how an external request to the gateway fills the pixel classification task queue and collects the probabilities is depicted above. Because the gateway could receive parallel requests that require the same blocks, but which are not processed yet, we design the communication such that no block is processed twice. Every incoming request first determines which blocks are required. Then it starts a block collector thread that listens on the ”block finished” queue for matching blocks. Only then it checks which required blocks are available in the cache and holds on to them. All other blocks are enqueued in the task queue. To prevent the same block to be enqueued multiple times, the first request to schedule a block for processing inserts a placeholder block into the cache that is taken by other requests as indicator that this block is already enqueued. Only as soon as the block collector thread has found all required blocks is the request served to the client. This very scheme is also employed when the thresholding service is asked to process a frame, which then requests and waits for all blocks that belong to the frame. With these steps it is trivial to process multiple tasks in parallel by an unlimited number of workers. For thresholding and object classification requests one can use similar task queue communication, but then tasks represent full frames, not blocks.
 
 # Using the docker image
 
@@ -114,9 +120,9 @@ A dockerimage can be built according to the `Dockerfile`, but is already availab
 It builds on an ubuntu, installs conda, and configures a conda environment to install all required packages (including one for the C++ backend from this repo, available as `conda install ilastikbackend -c chaubold`). Lastly it copies the python files from the `services` folder to the startup folder, and can be run as follows:
 
 ```sh
-docker run -d -p 8888:8888 --name test hcichaubold/ilastikbackend:0.2 python pixelclassificationservice.py --registry-ip some.ip.goes.here
-docker run -d -p 8889:8889 --name test hcichaubold/ilastikbackend:0.2 python thresholdingservice.py --registry-ip some.ip.goes.here
-docker run -d -p 8080:8080 --name test hcichaubold/ilastikbackend:0.2 python ilastikgateway.py --registry-ip some.ip.goes.here
+docker run -d -p 8888:8888 --name test hcichaubold/ilastikbackend:0.7 python pixelclassificationservice.py --registry-ip some.ip.goes.here
+docker run -d -p 8889:8889 --name test hcichaubold/ilastikbackend:0.7 python thresholdingservice.py --registry-ip some.ip.goes.here
+docker run -d -p 8080:8080 --name test hcichaubold/ilastikbackend:0.7 python ilastikgateway.py --registry-ip some.ip.goes.here
 ```
 
 A note for Mac users if you run docker locally: due to limitations of _Docker for Mac_, running docker containers cannot talk to ports running on the host, neither by `0.0.0.0` nor `localhost`. So use the workaround presented at the bottom of the [Docker Networking Help page](https://docs.docker.com/docker-for-mac/networking/#i-cannot-ping-my-containers) and create some ip alias.
@@ -132,3 +138,12 @@ python startAwsClusterIlastik.py --numPcWorkers 4 --logfile path/where/cluster/l
 ```
 
 This creates the required roles and permissions, spawns instances, configures the services such that they know the respective IP addresses, and once everything is set up, it waits for the user to press `Ctrl+C` to shut down all instances again.
+
+## Scaling behavior
+To test the proposed architecture, we process a 384 × 384 × 192 volume using 64 × 64 × 64 blocks (108 in total) and evaluate the scaling behavior with the number of machines when using 30 features per pixel. 
+![](figs/microservices-scaling.png)
+This shows the total runtime from requesting the thresholding output for the full image until the result is transferred. The pure processing time is very well distributed over the machines, but some overhead remains. As this is only one volume without multiple time steps, thresholding behaves like a global synchronization step. We chose this setup to limit the scaling effects to only one level, because as soon as multiple time frames are requested at the same time, blocks from different frames are competing for pixel classification workers, making it harder to evaluate.
+
+The resulting scaling behavior is nearly perfect, which is even more impressive considering that the total runtime includes the single-threaded thresholding step. This means that our architecture is very well suited to distribute the workload across multiple machines, and that the overhead incurred by data transfer is not affecting the performance much, but even more importantly is nearly constant no matter how many machines are used.
+All experiments were run on Amazon Web Services’s Elastic Compute Cloud (AWS EC2), using free tier t2.micro instances with 1 virtual CPU and 1GB RAM, only thresholding was run on a machine with 8GB RAM because even just storing all predictions of the volume requires 2.6GB of memory – which also means this amount of data transfer must have happened between pixel classification workers, cache, and thresholding service. The data provider service was also run on AWS, because data transfers within their network are faster and incur less charges than outbound traffic.
+In terms of pure processing runtime, ilastik performs a lot better (≈ 180s without thresholding also on a t2.micro AWS EC2 machine). But a lot of this speed difference can be allotted to a presmoothing step which reduces the feature computation runtime roughly by a factor of two to three. If this was also implemented in our pixel classification service prototype, the runtimes would be even better. Another reason could be that our choice of block size incurs much more redundant feature computations in the margins than that of ilastik (1143). Nevertheless, this has no effect on the near perfect scaling behavior of our architecture with the number of machines
